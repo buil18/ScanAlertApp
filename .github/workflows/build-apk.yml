@@ -12,6 +12,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pda-error-beeper   # mã nguồn nằm trong thư mục con này
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -28,11 +31,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: pda-error-beeper
-          path: pda-error-beeper.apk
+          path: pda-error-beeper/pda-error-beeper.apk
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'apk-moi-nhat' }}
           name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'APK mới nhất' }}
-          files: pda-error-beeper.apk
+          files: pda-error-beeper/pda-error-beeper.apk
           make_latest: true
