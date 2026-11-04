@@ -1,0 +1,38 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: Build APK
+        run: |
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk pda-error-beeper.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pda-error-beeper
+          path: pda-error-beeper.apk
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'apk-moi-nhat' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'APK mới nhất' }}
+          files: pda-error-beeper.apk
+          make_latest: true
