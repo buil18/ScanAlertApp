@@ -32,6 +32,21 @@
     <EditText android:id="@+id/beepSeconds" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:inputType="number" />
 
+    <CheckBox android:id="@+id/popupOnly" android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Chỉ bắt lỗi trong popup/hộp thoại (khuyên dùng – tránh bíp nhầm)" />
+
+    <CheckBox android:id="@+id/scanLog" android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Ghi log mọi lần quét (OK / LỖI) ra file CSV" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:text="ID ô nhập mã quét (để trống = mọi ô nhập; xem trong nhật ký dò, dòng NHẬP ô=...):" />
+    <EditText android:id="@+id/scanField" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true"
+        android:hint="vd: edtPalletNo" />
+
     <CheckBox android:id="@+id/debugLog" android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Chế độ dò (ghi lại chữ đọc được trên màn hình Heineken PDA)" />
@@ -40,6 +55,30 @@
         android:layout_height="wrap_content" android:text="Lưu cấu hình" />
     <Button android:id="@+id/btnTest" android:layout_width="match_parent"
         android:layout_height="wrap_content" android:text="Thử tiếng bíp" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:paddingTop="16dp" android:text="Gửi log lên Google Sheet" android:textStyle="bold" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Link Web App (https://script.google.com/macros/s/.../exec):" />
+    <EditText android:id="@+id/sheetUrl" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:inputType="textUri" android:singleLine="true" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Mã bí mật (TOKEN, giống trong Apps Script):" />
+    <EditText android:id="@+id/sheetToken" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Tên máy / người quét (hiện trên Sheet):" />
+    <EditText android:id="@+id/deviceName" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+    <Button android:id="@+id/btnSheetTest" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="Lưu &amp; gửi dòng thử lên Sheet" />
+    <TextView android:id="@+id/sheetStatus" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:textSize="12sp" />
+
+    <Button android:id="@+id/btnShareCsv" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="Gửi / chia sẻ file log quét hôm nay" />
+    <TextView android:id="@+id/csvInfo" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:textSize="12sp" />
 
     <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
         android:paddingTop="16dp" android:text="Nhật ký (mới nhất ở trên):" android:textStyle="bold" />
