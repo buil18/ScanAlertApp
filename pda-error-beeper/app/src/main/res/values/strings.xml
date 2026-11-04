@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">PDA Error Beeper</string>
+    <string name="service_label">PDA Error Beeper – cảnh báo lỗi</string>
+    <string name="service_description">Theo dõi hộp thoại lỗi của ứng dụng Heineken PDA (ví dụ "pallet không tồn tại") và phát tiếng bíp lớn. Ứng dụng không thu thập hay gửi dữ liệu ra ngoài.</string>
+</resources>

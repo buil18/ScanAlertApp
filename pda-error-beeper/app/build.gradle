@@ -1,0 +1,33 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.tools.pdabeeper'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.tools.pdabeeper'
+        minSdk 26
+        targetSdk 33
+        versionCode 1
+        versionName '1.0'
+    }
+
+    // Keystore cố định trong repo => mọi bản build có cùng chữ ký,
+    // cài bản mới đè bản cũ được (không phải gỡ, không mất quyền Trợ năng... phần lớn trường hợp).
+    signingConfigs {
+        fixed {
+            storeFile file('signing.keystore')
+            storePassword 'pdabeeper'
+            keyAlias 'pdabeeper'
+            keyPassword 'pdabeeper'
+        }
+    }
+    buildTypes {
+        debug   { signingConfig signingConfigs.fixed }
+        release { minifyEnabled false; signingConfig signingConfigs.fixed }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

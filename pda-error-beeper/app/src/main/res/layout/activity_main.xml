@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+<LinearLayout
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:padding="16dp">
+
+    <TextView android:id="@+id/status" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:textSize="18sp" android:textStyle="bold"
+        android:paddingBottom="8dp" />
+
+    <Button android:id="@+id/btnAccessibility" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="1. Mở cài đặt Trợ năng" />
+    <Button android:id="@+id/btnAppInfo" android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Mở Thông tin ứng dụng (⋮ → Cho phép cài đặt bị hạn chế)" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:paddingTop="16dp" android:text="Gói ứng dụng cần theo dõi:" />
+    <EditText android:id="@+id/targetPackage" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:text="Từ khóa lỗi (mỗi dòng một từ khóa, không phân biệt hoa/thường/dấu):" />
+    <EditText android:id="@+id/keywords" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:inputType="textMultiLine" android:minLines="3"
+        android:gravity="top" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:paddingTop="8dp" android:text="Số giây kêu bíp mỗi lần phát hiện:" />
+    <EditText android:id="@+id/beepSeconds" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:inputType="number" />
+
+    <CheckBox android:id="@+id/debugLog" android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Chế độ dò (ghi lại chữ đọc được trên màn hình Heineken PDA)" />
+
+    <Button android:id="@+id/btnSave" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="Lưu cấu hình" />
+    <Button android:id="@+id/btnTest" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="Thử tiếng bíp" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:paddingTop="16dp" android:text="Nhật ký (mới nhất ở trên):" android:textStyle="bold" />
+    <Button android:id="@+id/btnRefreshLog" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="Làm mới / Xóa nhật ký (giữ lâu để xóa)" />
+    <TextView android:id="@+id/log" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:textIsSelectable="true"
+        android:typeface="monospace" android:textSize="12sp" />
+</LinearLayout>
+</ScrollView>
