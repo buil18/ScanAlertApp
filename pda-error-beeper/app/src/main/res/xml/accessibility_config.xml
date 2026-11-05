@@ -2,7 +2,7 @@
 <!-- Không khai báo packageNames ở đây để vẫn bắt được Toast (Android 11+ Toast có thể do SystemUI hiển thị).
      Việc lọc theo gói com.heineken.cmobilepda được làm trong code. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeNotificationStateChanged|typeWindowsChanged|typeViewTextChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeNotificationStateChanged|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackAudible"
     android:accessibilityFlags="flagIncludeNotImportantViews|flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"

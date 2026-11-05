@@ -23,7 +23,14 @@ final class Alarm {
 
     boolean isPlaying() { return playing; }
 
-    void start(int seconds) {
+    /** Kiểu bíp: LOI = bíp ngắt quãng (pallet không tồn tại); SAI = còi 2 tông (sai hàng / thừa pallet). */
+    enum Kind { LOI, SAI }
+    private Kind kind = Kind.LOI;
+
+    void start(int seconds) { start(seconds, Kind.LOI); }
+
+    void start(int seconds, Kind k) {
+        kind = k;
         endAt = System.currentTimeMillis() + seconds * 1000L;
         if (playing) return;           // đang kêu thì chỉ gia hạn
         playing = true;
@@ -39,7 +46,8 @@ final class Alarm {
 
         Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
         if (v != null && v.hasVibrator()) {
-            long[] pattern = {0, 400, 150, 400, 150, 400};
+            long[] pattern = k == Kind.SAI ? new long[]{0, 1200, 200, 1200}
+                                           : new long[]{0, 400, 150, 400, 150, 400};
             v.vibrate(VibrationEffect.createWaveform(pattern, -1));
         }
         h.post(loop);
@@ -49,7 +57,8 @@ final class Alarm {
         @Override public void run() {
             if (!playing) return;
             if (System.currentTimeMillis() >= endAt) { stop(); return; }
-            if (tone != null) tone.startTone(ToneGenerator.TONE_CDMA_HIGH_L, (int) BEEP_ON_MS);
+            if (tone != null) tone.startTone(kind == Kind.SAI ? ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK
+                                                              : ToneGenerator.TONE_CDMA_HIGH_L, (int) BEEP_ON_MS);
             h.postDelayed(this, BEEP_ON_MS + BEEP_OFF_MS);
         }
     };

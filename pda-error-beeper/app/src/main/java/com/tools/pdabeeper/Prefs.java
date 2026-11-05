@@ -67,6 +67,14 @@ final class Prefs {
         return n.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
+    // --- Kiểm tra chéo GR ---
+    boolean crossCheck()   { return sp.getBoolean("cross", true); }
+    /** Mẫu mã hàng (regex), mặc định 8 số bắt đầu bằng 1, vd 10136696. */
+    String skuPattern()    { return sp.getString("skuPat", "1\\d{7}"); }
+    void saveCross(boolean on, String pat) {
+        sp.edit().putBoolean("cross", on).putString("skuPat", pat.trim().isEmpty() ? "1\\d{7}" : pat.trim()).apply();
+    }
+
     // --- Google Sheet ---
     String sheetUrl()   { return sp.getString("sheetUrl", "").trim(); }
     String sheetToken() { return sp.getString("sheetToken", "").trim(); }

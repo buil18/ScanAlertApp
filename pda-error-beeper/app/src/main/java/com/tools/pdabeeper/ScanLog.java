@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
  *   Download/PdaBeeper/scan_2026-11-04.csv  (mở được bằng Excel, có BOM UTF-8 cho tiếng Việt)
  */
 final class ScanLog {
-    static final String HEADER = "Ngay,Gio,KetQua,MaQuet,O_Nhap,ThongBao\r\n";
+    static final String HEADER = "Ngay,Gio,KetQua,MaQuet,DonHang_Xe,ThongBao\r\n";
     static final String FOLDER = "PdaBeeper";
 
     private final Context ctx;

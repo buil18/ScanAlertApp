@@ -103,11 +103,7 @@ final class SheetUploader {
         String location = c.getHeaderField("Location");
         String resp = "";
         try (InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream()) {
-            if (is != null) {
-                byte[] buf = new byte[512];
-                int n = is.read(buf);
-                if (n > 0) resp = new String(buf, 0, n, StandardCharsets.UTF_8);
-            }
+            resp = readAll(is);
         } finally { c.disconnect(); }
 
         if (code == 302 || code == 303) {
@@ -116,9 +112,7 @@ final class SheetUploader {
                 HttpURLConnection g = (HttpURLConnection) new URL(location).openConnection();
                 g.setConnectTimeout(15000); g.setReadTimeout(20000);
                 try (InputStream is = g.getInputStream()) {
-                    byte[] buf = new byte[256];
-                    int n = is.read(buf);
-                    resp = n > 0 ? new String(buf, 0, n, StandardCharsets.UTF_8) : "";
+                    resp = readAll(is);
                 } finally { g.disconnect(); }
             } else resp = "ok";
         } else if (code != 200) {
@@ -127,6 +121,16 @@ final class SheetUploader {
         if (!resp.trim().startsWith("ok")) {
             throw new Exception(resp.trim().isEmpty() ? "không có phản hồi" : shorten(resp.trim()));
         }
+    }
+
+    /** Đọc trọn phản hồi (tối đa 4 KB) – tránh đọc thiếu khiến tưởng lỗi rồi gửi trùng. */
+    private static String readAll(InputStream is) throws java.io.IOException {
+        if (is == null) return "";
+        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[1024];
+        int n;
+        while ((n = is.read(buf)) > 0 && bo.size() < 4096) bo.write(buf, 0, n);
+        return new String(bo.toByteArray(), StandardCharsets.UTF_8);
     }
 
     // -------- hàng đợi trên file --------

@@ -14,8 +14,8 @@ import android.widget.Toast;
 public class MainActivity extends Activity {
     private Prefs prefs;
     private Alarm testAlarm;
-    private EditText pkg, kw, secs, scanField, sheetUrl, sheetToken, deviceName;
-    private CheckBox debug, popupOnly, scanLog;
+    private EditText pkg, kw, secs, skuPattern, sheetUrl, sheetToken, deviceName;
+    private CheckBox debug, scanLog, crossCheck;
     private TextView status, log, csvInfo, sheetStatus;
 
     @Override protected void onCreate(Bundle b) {
@@ -30,11 +30,13 @@ public class MainActivity extends Activity {
         pkg = findViewById(R.id.targetPackage);
         kw = findViewById(R.id.keywords);
         secs = findViewById(R.id.beepSeconds);
-        scanField = findViewById(R.id.scanField);
         debug = findViewById(R.id.debugLog);
-        popupOnly = findViewById(R.id.popupOnly);
         scanLog = findViewById(R.id.scanLog);
 
+        crossCheck = findViewById(R.id.crossCheck);
+        skuPattern = findViewById(R.id.skuPattern);
+        crossCheck.setChecked(prefs.crossCheck());
+        skuPattern.setText(prefs.skuPattern());
         sheetUrl = findViewById(R.id.sheetUrl);
         sheetToken = findViewById(R.id.sheetToken);
         deviceName = findViewById(R.id.deviceName);
@@ -46,9 +48,7 @@ public class MainActivity extends Activity {
         pkg.setText(prefs.targetPackage());
         kw.setText(prefs.keywordsRaw());
         secs.setText(String.valueOf(prefs.beepSeconds()));
-        scanField.setText(prefs.scanFieldId());
         debug.setChecked(prefs.debugLog());
-        popupOnly.setChecked(prefs.popupOnly());
         scanLog.setChecked(prefs.scanLogEnabled());
 
         ((Button) findViewById(R.id.btnAccessibility)).setOnClickListener(v ->
@@ -60,9 +60,13 @@ public class MainActivity extends Activity {
             int s;
             try { s = Integer.parseInt(secs.getText().toString().trim()); } catch (NumberFormatException e) { s = 3; }
             prefs.save(pkg.getText().toString(), kw.getText().toString(), s, debug.isChecked(),
-                    popupOnly.isChecked(), scanLog.isChecked(), scanField.getText().toString());
+                    false, scanLog.isChecked(), "");
             prefs.saveSheet(sheetUrl.getText().toString(), sheetToken.getText().toString(),
                     deviceName.getText().toString());
+            String pat = skuPattern.getText().toString().trim();
+            try { java.util.regex.Pattern.compile(pat.isEmpty() ? "1\\d{7}" : pat); }
+            catch (Exception ex) { Toast.makeText(this, "Mẫu mã hàng sai cú pháp", Toast.LENGTH_LONG).show(); return; }
+            prefs.saveCross(crossCheck.isChecked(), pat);
             Toast.makeText(this, "Đã lưu", Toast.LENGTH_SHORT).show();
         });
         ((Button) findViewById(R.id.btnSheetTest)).setOnClickListener(v -> {
@@ -110,7 +114,20 @@ public class MainActivity extends Activity {
                 + ScanLog.fileName(ScanLog.today()) + " (mỗi ngày 1 file, mở bằng Excel)");
         log.setText(prefs.readLog());
         sheetStatus.setText(SheetUploader.get(this).status());
+        sheetStatus.removeCallbacks(refreshStatus);
+        sheetStatus.postDelayed(refreshStatus, 3000);
     }
 
-    @Override protected void onPause() { super.onPause(); testAlarm.stop(); }
+    private final Runnable refreshStatus = new Runnable() {
+        @Override public void run() {
+            sheetStatus.setText(SheetUploader.get(MainActivity.this).status());
+            sheetStatus.postDelayed(this, 3000);
+        }
+    };
+
+    @Override protected void onPause() {
+        super.onPause();
+        testAlarm.stop();
+        sheetStatus.removeCallbacks(refreshStatus);
+    }
 }
