@@ -37,12 +37,13 @@ final class OrderCheck {
         Map<String, Line> lines = new LinkedHashMap<>();
         boolean allHaveMaster() { for (Line l : lines.values()) if (l.maxPallets < 0) return false; return true; }
         int totalPallets() { int t = 0; for (Line l : lines.values()) t += Math.max(l.maxPallets, 0); return t; }
+        double totalQty() { double t = 0; for (Line l : lines.values()) t += l.qty; return t; }
     }
 
-    enum Kind { NO_DATA, UNKNOWN_SKU, WRONG_SKU, OVER, OK }
+    enum Kind { NO_DATA, UNKNOWN_SKU, NO_QTY, WRONG_SKU, OVER, OK }
 
     static final class Verdict {
-        Kind kind; String sku, msg; int scanned, max;
+        Kind kind; String sku, msg; double scanned, max;
     }
 
     interface Listener { void onExpectLoaded(String so, Expect e, String error); }
@@ -150,12 +151,6 @@ final class OrderCheck {
 
     boolean known(String so, String pallet) { return tally(so).has(pallet); }
 
-    int scannedOf(String so, String sku) {
-        JSONObject t = tally(so); int c = 0;
-        for (Iterator<String> it = t.keys(); it.hasNext(); ) if (sku.equals(t.optString(it.next()))) c++;
-        return c;
-    }
-
     int tallySize(String so) { return tally(so).length(); }
 
     void remove(String so, String pallet) {
@@ -164,12 +159,37 @@ final class OrderCheck {
         saveTally(so, t);
     }
 
-    /** Ghi nhận 1 pallet vừa quét và trả kết quả đối chiếu. sku = null nếu không đọc được. */
-    Verdict onScan(String so, String pallet, String sku) {
+    // Giá trị tally: "mãhàng|số lượng" (số lượng trống nếu không đọc được); bản cũ chỉ có mã hàng.
+    private static String[] split(String v) {
+        int i = v == null ? -1 : v.indexOf('|');
+        if (i < 0) return new String[]{v == null ? "" : v, ""};
+        return new String[]{v.substring(0, i), v.substring(i + 1)};
+    }
+
+    private static double num(String s) {
+        try { return s.isEmpty() ? -1 : Double.parseDouble(s); } catch (Exception e) { return -1; }
+    }
+
+    static String fmt(double v) {
+        return v == Math.rint(v) ? String.valueOf((long) v) : String.format(java.util.Locale.ROOT, "%.1f", v);
+    }
+
+    /** Tổng số lượng đã quét của 1 mã hàng (cộng số in trên từng pallet). */
+    double scannedQty(String so, String sku) {
+        JSONObject t = tally(so); double sum = 0;
+        for (Iterator<String> it = t.keys(); it.hasNext(); ) {
+            String[] p = split(t.optString(it.next()));
+            if (sku.equals(p[0])) sum += Math.max(num(p[1]), 0);
+        }
+        return sum;
+    }
+
+    /** Ghi nhận 1 pallet vừa quét và trả kết quả đối chiếu. sku = null nếu không đọc được; qty < 0 nếu không đọc được số lượng. */
+    Verdict onScan(String so, String pallet, String sku, double qty) {
         Verdict v = new Verdict();
         v.sku = sku;
         JSONObject t = tally(so);
-        try { t.put(pallet, sku == null ? "" : sku); } catch (Exception ignored) { }
+        try { t.put(pallet, (sku == null ? "" : sku) + "|" + (qty < 0 ? "" : fmt(qty))); } catch (Exception ignored) { }
         saveTally(so, t);
 
         Expect e = expect(so);
@@ -181,17 +201,20 @@ final class OrderCheck {
             v.msg = "SAI HÀNG: mã " + sku + " KHÔNG có trong đơn " + so;
             return v;
         }
-        v.scanned = scannedOf(so, sku);
-        v.max = l.maxPallets;
-        if (l.maxPallets < 0) {
-            v.kind = Kind.UNKNOWN_SKU;
-            v.msg = sku + " có trong đơn nhưng chưa có quy cách pallet (Master) – đã quét " + v.scanned;
-        } else if (v.scanned > l.maxPallets) {
+        if (qty < 0) {
+            v.kind = Kind.NO_QTY;
+            v.msg = "Không đọc được số lượng của pallet " + pallet + " (mã " + sku + ")";
+            return v;
+        }
+        v.scanned = scannedQty(so, sku);
+        v.max = l.qty;
+        if (v.scanned > l.qty + 1e-9) {
             v.kind = Kind.OVER;
-            v.msg = "THỪA PALLET: " + sku + " " + shortName(l.name) + " đã quét " + v.scanned + " / GR " + l.maxPallets;
+            v.msg = "THỪA: " + sku + " " + shortName(l.name) + " đã quét " + fmt(v.scanned) + " / GR " + fmt(l.qty)
+                    + " (vượt " + fmt(v.scanned - l.qty) + ")";
         } else {
             v.kind = Kind.OK;
-            v.msg = "✓ " + sku + " " + shortName(l.name) + "  " + v.scanned + "/" + l.maxPallets;
+            v.msg = "✓ " + sku + " " + shortName(l.name) + "  " + fmt(v.scanned) + "/" + fmt(l.qty);
         }
         return v;
     }
@@ -200,17 +223,28 @@ final class OrderCheck {
     String summary(String so) {
         Expect e = expect(so);
         if (e == null) return "Chưa có dữ liệu GR";
-        StringBuilder sb = new StringBuilder();
-        for (Line l : e.lines.values()) {
-            int s = scannedOf(so, l.sku);
-            if (l.maxPallets >= 0 && s != l.maxPallets)
-                sb.append(l.sku).append(" ").append(s).append("/").append(l.maxPallets).append("; ");
-        }
+        Map<String, Double> sum = new LinkedHashMap<>();
+        boolean noSku = false, noQty = false;
         JSONObject t = tally(so);
         for (Iterator<String> it = t.keys(); it.hasNext(); ) {
-            String sku = t.optString(it.next());
-            if (sku.isEmpty()) { sb.append("có pallet chưa rõ mã hàng; "); break; }
+            String[] p = split(t.optString(it.next()));
+            if (p[0].isEmpty()) { noSku = true; continue; }
+            double q = num(p[1]);
+            if (q < 0) noQty = true;
+            Double cur = sum.get(p[0]);
+            sum.put(p[0], (cur == null ? 0 : cur) + Math.max(q, 0));
         }
+        StringBuilder sb = new StringBuilder();
+        for (Line l : e.lines.values()) {
+            Double got = sum.get(l.sku);
+            double s = got == null ? 0 : got, d = s - l.qty;
+            if (Math.abs(d) > 1e-9)
+                sb.append(l.sku).append(": quét ").append(fmt(s)).append(" / GR ").append(fmt(l.qty))
+                  .append(d < 0 ? " (thiếu " + fmt(-d) + ")" : " (thừa " + fmt(d) + ")").append("; ");
+        }
+        for (String sku : sum.keySet()) if (!e.lines.containsKey(sku)) sb.append("mã ").append(sku).append(" không có trong đơn; ");
+        if (noSku) sb.append("có pallet chưa rõ mã hàng; ");
+        if (noQty) sb.append("có pallet chưa rõ số lượng; ");
         return sb.length() == 0 ? null : sb.toString().trim();
     }
 

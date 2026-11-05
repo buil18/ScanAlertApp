@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
  *   Download/PdaBeeper/scan_2026-11-04.csv  (mở được bằng Excel, có BOM UTF-8 cho tiếng Việt)
  */
 final class ScanLog {
-    static final String HEADER = "Ngay,Gio,KetQua,MaQuet,DonHang_Xe,ThongBao,PalletID,SoCase,ViTri,MaSP,TenSP\r\n";
+    static final String HEADER = "Ngay,Gio,KetQua,MaQuet,DonHang_Xe,ThongBao,PalletID,SoLuong,DonVi,ViTri,MaSP,TenSP\r\n";
     static final String FOLDER = "PdaBeeper";
 
     private final Context ctx;
@@ -35,7 +35,7 @@ final class ScanLog {
     static String today() { return new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date()); }
     static String fileName(String day) { return "scan_" + day + ".csv"; }
 
-    /** det = [PalletID, SoCase, ViTri, MaSP, TenSP] */
+    /** det = [PalletID, SoLuong, DonVi, ViTri, MaSP, TenSP] */
     void write(long timeMs, String result, String code, String field, String message, String[] det) {
         Date d = new Date(timeMs);
         String day = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(d);

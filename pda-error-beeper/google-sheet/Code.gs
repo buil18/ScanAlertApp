@@ -7,7 +7,7 @@
 const TOKEN = 'doi-ma-bi-mat-nay-123';
 
 const SHEET_NAME = 'ScanLog';
-const HEADER = ['Thời gian quét', 'Máy / Người quét', 'Kết quả', 'Mã quét', 'Đơn hàng / Xe', 'Thông báo', 'Pallet ID', 'Số Case', 'Vị trí', 'Mã SP', 'Tên SP', 'Nhận lúc'];
+const HEADER = ['Thời gian quét', 'Máy / Người quét', 'Kết quả', 'Mã quét', 'Đơn hàng / Xe', 'Thông báo', 'Pallet ID', 'Số lượng', 'Đơn vị', 'Vị trí', 'Mã SP', 'Tên SP', 'Nhận lúc'];
 
 function doPost(e) {
   let data;
@@ -27,8 +27,8 @@ function doPost(e) {
     const sh = getSheet_();
     const now = new Date();
     const values = rows.map(r => {
-      const v = r.slice(0, 11).map(x => String(x));
-      while (v.length < 11) v.push('');
+      const v = r.slice(0, 12).map(x => String(x));
+      while (v.length < 12) v.push('');
       return v.concat([now]);
     });
     sh.getRange(sh.getLastRow() + 1, 1, values.length, HEADER.length).setValues(values);
@@ -64,12 +64,12 @@ function ensureHeader_(sh) {
     .setFontWeight('bold').setBackground('#1b5e20').setFontColor('#ffffff');
   sh.setFrozenRows(1);
   sh.getRange('D:D').setNumberFormat('@');            // giữ nguyên mã quét (số 0 ở đầu…)
-  sh.getRange('L:L').setNumberFormat('dd/MM/yyyy HH:mm:ss');
+  sh.getRange('M:M').setNumberFormat('dd/MM/yyyy HH:mm:ss');
   sh.setColumnWidths(1, HEADER.length, 150);
   sh.setColumnWidth(6, 320);
 
   // Tô đỏ dòng LOI, tô xanh dòng OK
-  const all = sh.getRange('A2:L');
+  const all = sh.getRange('A2:M');
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied('=OR(LEFT($C2,3)="SAI",LEFT($C2,4)="THUA")')
@@ -114,7 +114,6 @@ function pdaGetOrder_(so) {
   if (!so) return { ok: false, reason: 'thiếu số SO' };
   const sh = pdaSheet_();
   const values = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 6).getValues() : [];
-  const master = masterMap_();
   const bySku = {};
   let updated = '';
   values.forEach(r => {
@@ -126,16 +125,10 @@ function pdaGetOrder_(so) {
     if (r[5]) updated = r[5] instanceof Date
       ? Utilities.formatDate(r[5], Session.getScriptTimeZone(), 'dd/MM HH:mm') : String(r[5]);
   });
-  const lines = Object.keys(bySku).map(k => {
-    const l = bySku[k];
-    const per = master[k] || 0;
-    l.perPallet = per;
-    l.maxPallets = per > 0 ? Math.ceil(l.qty / per) : -1;   // -1 = chưa có quy cách
-    return l;
-  });
+  const lines = Object.keys(bySku).map(k => bySku[k]);       // {sku, name, qty} – so trực tiếp với số lượng trên PDA
   if (lines.length === 0) return { ok: false, reason: 'Chưa có dữ liệu GR cho SO ' + so };
-  const total = lines.reduce((t, l) => t + Math.max(l.maxPallets, 0), 0);
-  return { ok: true, so: so, updated: updated, totalPallets: total, lines: lines };
+  const total = lines.reduce((t, l) => t + l.qty, 0);
+  return { ok: true, so: so, updated: updated, totalQty: total, lines: lines };
 }
 
 /** Ghi (thay thế) dữ liệu GR của 1 SO. Dùng cho bước 2: tool đối soát đẩy sang. */

@@ -36,7 +36,7 @@ public class ErrorWatcherService extends AccessibilityService {
     private static final Pattern P_XE = Pattern.compile("so xe\\s*:?\\s*((?=[a-z0-9.\\-]*\\d)[a-z0-9][a-z0-9.\\-]{3,})");
     private static final Pattern P_ID = Pattern.compile("(?<!\\d)\\d{12,20}(?!\\d)");
     private static final Pattern P_TOTAL = Pattern.compile("tong sl pallet\\s*:\\s*(\\d+)");
-    private static final Pattern P_CASE = Pattern.compile("/\\s*(\\d+)\\s*case", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_QTY = Pattern.compile("/\\s*(\\d+(?:[.,]\\d+)?)\\s*(\\p{L}+)");
     private static final Pattern P_LOC = Pattern.compile("v\\S{0,3}\\s+tr\\S{0,3}\\s*:\\s*\\|?\\s*([^|]+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_PROD = Pattern.compile("s\\S{0,3}n\\s+ph\\S{0,3}m\\s*:\\s*\\|?\\s*(\\d{6,10})\\s*-\\s*([^|]+)", Pattern.CASE_INSENSITIVE);
 
@@ -61,7 +61,13 @@ public class ErrorWatcherService extends AccessibilityService {
     private Overlay overlay;
     private String errorPallet;                      // pallet đang bị báo đỏ (xóa thì ẩn cảnh báo)
     private final java.util.Set<String> doneSummary = new java.util.HashSet<>();
-    private final java.util.Set<String> totalWarned = new java.util.HashSet<>();
+    private final java.util.Map<String, PalletInfo> palletCache = new java.util.LinkedHashMap<>();
+
+    /** Thông tin 1 pallet đọc từ màn hình PDA. */
+    static final class PalletInfo {
+        String pid, sku, name = "", loc = "", unit = "";
+        double qty = -1;     // -1 = không đọc được
+    }
 
     private final Runnable scan = this::scanWindows;
 
@@ -139,6 +145,11 @@ public class ErrorWatcherService extends AccessibilityService {
         Set<String> ids = new LinkedHashSet<>();
         Matcher mi = P_ID.matcher(all);
         while (mi.find()) if (!mi.group().equals(so)) ids.add(mi.group());
+        if (palletCache.size() > 300) palletCache.clear();
+        for (String pid : ids) {                                  // đọc mã hàng + số lượng của từng pallet đang hiện
+            PalletInfo pi = parseInfo(pid, check.expect(so));
+            if (pi != null) palletCache.put(pid, pi);
+        }
 
         boolean countUp = false;
         if (count >= 0) {
@@ -152,8 +163,8 @@ public class ErrorWatcherService extends AccessibilityService {
                     if (added.isEmpty()) record("OK", "", "Đã quét " + count);
                     for (String pid : added) onPalletScanned(so, pid, count);
                 } else {
-                    for (String pid : removed) onPalletRemoved(so, pid);
-                    record("XOA", String.join(" ", removed), "Đã quét " + count);
+                    for (String pid : removed) { onPalletRemoved(so, pid); record("XOA", pid, "Đã quét " + count); }
+                    if (removed.isEmpty()) record("XOA", "", "Đã quét " + count);
                 }
                 checkCompletion(so, count);
             }
@@ -198,19 +209,15 @@ public class ErrorWatcherService extends AccessibilityService {
         scanLog.write(now(), result, code, ctx.trim(), shorten(message), details(code));
     }
 
-    /** [PalletID, SoCase, ViTri, MaSP, TenSP] lấy từ màn hình hiện tại (curAll). */
+    /** [PalletID, SoLuong, DonVi, ViTri, MaSP, TenSP] của pallet đầu tiên trong code (lấy từ bộ nhớ đệm màn hình). */
     private String[] details(String code) {
         String pid = "";
         Matcher mi = P_ID.matcher(code == null ? "" : code);
         if (mi.find()) pid = mi.group();
-        String cases = "", loc = "", sku = "", name = "";
-        Matcher m = P_CASE.matcher(curAll);
-        if (m.find()) cases = m.group(1);
-        m = P_LOC.matcher(curAll);
-        if (m.find()) loc = m.group(1).trim();
-        m = P_PROD.matcher(curAll);
-        if (m.find()) { sku = m.group(1); name = m.group(2).trim(); }
-        return new String[]{pid, cases, loc, sku, name};
+        PalletInfo pi = pid.isEmpty() ? null : palletCache.get(pid);
+        if (pi == null) return new String[]{pid, "", "", "", "", ""};
+        return new String[]{pid, pi.qty < 0 ? "" : OrderCheck.fmt(pi.qty), pi.unit, pi.loc,
+                pi.sku == null ? "" : pi.sku, pi.name};
     }
 
     /** Chỉ lấy chữ của các view đang hiển thị thật; mỗi view 1 phần tử. */
@@ -232,8 +239,8 @@ public class ErrorWatcherService extends AccessibilityService {
         // pallet đã quét trước khi app theo dõi: ghi nhận vào tally (không báo động)
         for (String pid : visibleIds) {
             if (!check.known(so, pid)) {
-                String sku = skuNear(pid, check.expect(so));
-                check.onScan(so, pid, sku);
+                PalletInfo pi = palletCache.get(pid);
+                check.onScan(so, pid, pi == null ? null : pi.sku, pi == null ? -1 : pi.qty);
             }
         }
         check.ensure(so, false, this::onExpectLoaded);
@@ -246,25 +253,20 @@ public class ErrorWatcherService extends AccessibilityService {
                     + "\n" + error + "\nKHÔNG kiểm tra chéo được");
             return;
         }
-        prefs.log("GR " + so + ": " + e.lines.size() + " mã hàng, " + e.totalPallets() + " pallet"
+        prefs.log("GR " + so + ": " + e.lines.size() + " mã hàng, tổng " + OrderCheck.fmt(e.totalQty())
                 + (error != null ? " (dùng bản lưu trên máy – " + error + ")" : ""));
-        if (so.equals(curSo) && curTotal >= 0 && e.allHaveMaster()
-                && curTotal != e.totalPallets() && totalWarned.add(so)) {
-            String msg = "Tổng pallet PDA " + curTotal + " ≠ GR " + e.totalPallets();
-            overlay.show(Overlay.Level.WARN, "⚠ " + msg + " (SO " + so + ")");
-            record("LECH_TONG", "", msg);
-        }
     }
 
     private void onPalletScanned(String so, String pid, int count) {
         if (!prefs.crossCheck()) { record("OK", pid, "Đã quét " + count); return; }
         check.ensure(so, false, this::onExpectLoaded);           // làm mới định kỳ
-        String sku = skuNear(pid, check.expect(so));
-        OrderCheck.Verdict v = check.onScan(so, pid, sku);
+        PalletInfo pi = palletCache.get(pid);
+        String sku = pi == null ? null : pi.sku;
+        OrderCheck.Verdict v = check.onScan(so, pid, sku, pi == null ? -1 : pi.qty);
         switch (v.kind) {
             case OK:
                 overlay.show(Overlay.Level.OK, v.msg);
-                record("OK", pid, (sku == null ? "" : sku + " ") + v.scanned + "/" + v.max);
+                record("OK", pid, (sku == null ? "" : sku + " ") + OrderCheck.fmt(v.scanned) + "/" + OrderCheck.fmt(v.max));
                 break;
             case WRONG_SKU:
             case OVER:
@@ -272,9 +274,9 @@ public class ErrorWatcherService extends AccessibilityService {
                 alarm.start(Math.max(prefs.beepSeconds(), 3), Alarm.Kind.SAI);
                 overlay.show(Overlay.Level.ERROR, "⛔ " + v.msg + "\nPallet " + pid + "\n→ Xóa pallet này trên PDA");
                 prefs.log("BÍP SAI ← " + v.msg + " | pallet " + pid);
-                record(v.kind == OrderCheck.Kind.WRONG_SKU ? "SAI_HANG" : "THUA_PALLET", pid, v.msg);
+                record(v.kind == OrderCheck.Kind.WRONG_SKU ? "SAI_HANG" : "THUA_SL", pid, v.msg);
                 break;
-            default:   // NO_DATA, UNKNOWN_SKU
+            default:   // NO_DATA, UNKNOWN_SKU, NO_QTY
                 overlay.show(Overlay.Level.WARN, "⚠ " + v.msg);
                 record("OK_CHUA_DOI_CHIEU", pid, v.msg);
         }
@@ -303,11 +305,10 @@ public class ErrorWatcherService extends AccessibilityService {
     }
 
     /**
-     * Tìm mã hàng của pallet: lấy đoạn chữ NGAY SAU mã pallet cho tới mã pallet kế tiếp
-     * (mỗi pallet trên PDA gồm: mã pallet, vị trí, "Sản phẩm: <mã hàng> - <tên>", lot...).
-     * Ưu tiên mã có trong đơn GR; không có thì lấy mã đầu tiên khớp mẫu.
+     * Đọc thông tin 1 pallet: lấy đoạn chữ NGAY SAU mã pallet cho tới mã pallet kế tiếp
+     * (mỗi pallet trên PDA gồm: mã pallet "/160 Tray", vị trí, "Sản phẩm: <mã hàng> - <tên>", lot...).
      */
-    private String skuNear(String pid, OrderCheck.Expect e) {
+    private PalletInfo parseInfo(String pid, OrderCheck.Expect e) {
         String all = curAll;
         int at = all.indexOf(pid);
         if (at < 0) return null;
@@ -315,17 +316,31 @@ public class ErrorWatcherService extends AccessibilityService {
         Matcher nx = P_ID.matcher(all);
         if (nx.find(from)) to = nx.start();
         String seg = all.substring(from, to);
-        Pattern skuP;
-        try { skuP = Pattern.compile("(?<!\\d)(" + prefs.skuPattern() + ")(?!\\d)"); }
-        catch (Exception ex) { skuP = Pattern.compile("(?<!\\d)(1\\d{7})(?!\\d)"); }
-        String first = null;
-        Matcher m = skuP.matcher(seg);
-        while (m.find()) {
-            String c = m.group(1);
-            if (e != null && e.lines.containsKey(c)) return c;
-            if (first == null) first = c;
+        PalletInfo p = new PalletInfo();
+        p.pid = pid;
+        Matcher m = P_QTY.matcher(seg);
+        if (m.find() && m.start() <= 8) {                         // "/160 Tray" nằm ngay sau mã pallet
+            try { p.qty = Double.parseDouble(m.group(1).replace(',', '.')); } catch (Exception ignored) { }
+            p.unit = m.group(2);
         }
-        return first;
+        m = P_LOC.matcher(seg);
+        if (m.find()) p.loc = m.group(1).trim();
+        m = P_PROD.matcher(seg);
+        if (m.find()) { p.sku = m.group(1); p.name = m.group(2).trim(); }
+        if (p.sku == null) {                                      // không có dòng "Sản phẩm: ..." -> dò theo mẫu mã hàng
+            Pattern skuP;
+            try { skuP = Pattern.compile("(?<!\\d)(" + prefs.skuPattern() + ")(?!\\d)"); }
+            catch (Exception ex) { skuP = Pattern.compile("(?<!\\d)(1\\d{7})(?!\\d)"); }
+            String first = null;
+            m = skuP.matcher(seg);
+            while (m.find()) {
+                String c = m.group(1);
+                if (e != null && e.lines.containsKey(c)) { first = c; break; }
+                if (first == null) first = c;
+            }
+            p.sku = first;
+        }
+        return p;
     }
 
     // ===================== tiện ích =====================
