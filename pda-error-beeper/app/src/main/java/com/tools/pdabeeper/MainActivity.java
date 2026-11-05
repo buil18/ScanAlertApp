@@ -76,7 +76,7 @@ public class MainActivity extends Activity {
             if (!up.configured()) { Toast.makeText(this, "Chưa nhập link Web App", Toast.LENGTH_LONG).show(); return; }
             java.util.Date d = new java.util.Date();
             up.enqueue(ScanLog.today(), new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(d),
-                    "TEST", "TEST-123", "", "Dòng thử từ PDA Error Beeper");
+                    "TEST", "TEST-123", "", "Dòng thử từ PDA Error Beeper", new String[]{"", "", "", "", ""});
             sheetStatus.setText("Đang gửi…");
             sheetStatus.postDelayed(() -> sheetStatus.setText(up.status()), 6000);
         });
