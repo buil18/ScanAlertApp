@@ -32,8 +32,8 @@ public class ErrorWatcherService extends AccessibilityService {
     private static final String SYSTEM_UI = "com.android.systemui";
 
     private static final Pattern P_COUNT = Pattern.compile("da quet\\s*:?\\s*(\\d+)");
-    private static final Pattern P_SO = Pattern.compile("sales order\\s*:?\\s*(\\d+)");
-    private static final Pattern P_XE = Pattern.compile("so xe\\s*:?\\s*([a-z0-9][a-z0-9.\\-]{3,})");
+    private static final Pattern P_SO = Pattern.compile("(?:sales order|st number|so number)\\s*:?\\s*(\\d+)");
+    private static final Pattern P_XE = Pattern.compile("so xe\\s*:?\\s*((?=[a-z0-9.\\-]*\\d)[a-z0-9][a-z0-9.\\-]{3,})");
     private static final Pattern P_ID = Pattern.compile("(?<!\\d)\\d{12,20}(?!\\d)");
     private static final Pattern P_TOTAL = Pattern.compile("tong sl pallet\\s*:\\s*(\\d+)");
     private static final Pattern P_CASE = Pattern.compile("/\\s*(\\d+)\\s*case", Pattern.CASE_INSENSITIVE);
