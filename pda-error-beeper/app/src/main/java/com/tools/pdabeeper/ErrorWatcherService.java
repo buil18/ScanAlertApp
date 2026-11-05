@@ -303,33 +303,27 @@ public class ErrorWatcherService extends AccessibilityService {
     }
 
     /**
-     * Tìm mã hàng của pallet trong danh sách trên PDA: xét các ô chữ quanh ô chứa mã pallet
-     * (từ pallet trước tới pallet sau). Ưu tiên mã có trong đơn GR; không có thì lấy mã đầu tiên khớp mẫu.
+     * Tìm mã hàng của pallet: lấy đoạn chữ NGAY SAU mã pallet cho tới mã pallet kế tiếp
+     * (mỗi pallet trên PDA gồm: mã pallet, vị trí, "Sản phẩm: <mã hàng> - <tên>", lot...).
+     * Ưu tiên mã có trong đơn GR; không có thì lấy mã đầu tiên khớp mẫu.
      */
     private String skuNear(String pid, OrderCheck.Expect e) {
-        List<String> t = curTexts;
-        int at = -1;
-        for (int i = 0; i < t.size(); i++) if (t.get(i).contains(pid)) { at = i; break; }
+        String all = curAll;
+        int at = all.indexOf(pid);
         if (at < 0) return null;
-        int from = at, to = at;
-        while (from - 1 >= 0 && !P_ID.matcher(t.get(from - 1)).find() && at - from < 4) from--;
-        while (to + 1 < t.size() && !P_ID.matcher(t.get(to + 1)).find() && to - at < 4) to++;
+        int from = at + pid.length(), to = all.length();
+        Matcher nx = P_ID.matcher(all);
+        if (nx.find(from)) to = nx.start();
+        String seg = all.substring(from, to);
         Pattern skuP;
         try { skuP = Pattern.compile("(?<!\\d)(" + prefs.skuPattern() + ")(?!\\d)"); }
         catch (Exception ex) { skuP = Pattern.compile("(?<!\\d)(1\\d{7})(?!\\d)"); }
         String first = null;
-        // ô chứa pallet trước, rồi các ô sau, rồi các ô trước
-        int[] order = new int[to - from + 1]; int k = 0;
-        order[k++] = at;
-        for (int i = at + 1; i <= to; i++) order[k++] = i;
-        for (int i = at - 1; i >= from; i--) order[k++] = i;
-        for (int idx : order) {
-            Matcher m = skuP.matcher(t.get(idx).replace(pid, " "));
-            while (m.find()) {
-                String c = m.group(1);
-                if (e != null && e.lines.containsKey(c)) return c;
-                if (first == null) first = c;
-            }
+        Matcher m = skuP.matcher(seg);
+        while (m.find()) {
+            String c = m.group(1);
+            if (e != null && e.lines.containsKey(c)) return c;
+            if (first == null) first = c;
         }
         return first;
     }
