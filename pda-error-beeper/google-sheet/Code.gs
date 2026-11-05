@@ -7,7 +7,7 @@
 const TOKEN = 'doi-ma-bi-mat-nay-123';
 
 const SHEET_NAME = 'ScanLog';
-const HEADER = ['Thời gian quét', 'Máy / Người quét', 'Kết quả', 'Mã quét', 'Đơn hàng / Xe', 'Thông báo', 'Nhận lúc'];
+const HEADER = ['Thời gian quét', 'Máy / Người quét', 'Kết quả', 'Mã quét', 'Đơn hàng / Xe', 'Thông báo', 'Pallet ID', 'Số Case', 'Vị trí', 'Mã SP', 'Tên SP', 'Nhận lúc'];
 
 function doPost(e) {
   let data;
@@ -26,7 +26,11 @@ function doPost(e) {
   try {
     const sh = getSheet_();
     const now = new Date();
-    const values = rows.map(r => r.slice(0, 6).map(v => String(v)).concat([now]));
+    const values = rows.map(r => {
+      const v = r.slice(0, 11).map(x => String(x));
+      while (v.length < 11) v.push('');
+      return v.concat([now]);
+    });
     sh.getRange(sh.getLastRow() + 1, 1, values.length, HEADER.length).setValues(values);
   } finally {
     lock.releaseLock();
@@ -60,12 +64,12 @@ function ensureHeader_(sh) {
     .setFontWeight('bold').setBackground('#1b5e20').setFontColor('#ffffff');
   sh.setFrozenRows(1);
   sh.getRange('D:D').setNumberFormat('@');            // giữ nguyên mã quét (số 0 ở đầu…)
-  sh.getRange('G:G').setNumberFormat('dd/MM/yyyy HH:mm:ss');
+  sh.getRange('L:L').setNumberFormat('dd/MM/yyyy HH:mm:ss');
   sh.setColumnWidths(1, HEADER.length, 150);
   sh.setColumnWidth(6, 320);
 
   // Tô đỏ dòng LOI, tô xanh dòng OK
-  const all = sh.getRange('A2:G');
+  const all = sh.getRange('A2:L');
   sh.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied('=OR(LEFT($C2,3)="SAI",LEFT($C2,4)="THUA")')

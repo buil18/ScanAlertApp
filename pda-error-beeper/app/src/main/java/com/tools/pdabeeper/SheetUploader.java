@@ -49,10 +49,11 @@ final class SheetUploader {
     String status() { return lastStatus + " – đang chờ gửi: " + pendingCount() + " dòng"; }
 
     /** Thêm 1 dòng vào hàng đợi và gửi ngay. */
-    void enqueue(String day, String time, String result, String code, String field, String message) {
+    void enqueue(String day, String time, String result, String code, String field, String message, String[] det) {
         if (!configured()) return;
         JSONArray row = new JSONArray();
         row.put(day + " " + time).put(prefs.deviceName()).put(result).put(code).put(field).put(message);
+        for (String x : det) row.put(x);
         ex.execute(() -> { appendLine(row.toString()); flush(); });
     }
 

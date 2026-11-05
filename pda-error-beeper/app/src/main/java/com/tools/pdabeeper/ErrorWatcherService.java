@@ -36,6 +36,9 @@ public class ErrorWatcherService extends AccessibilityService {
     private static final Pattern P_XE = Pattern.compile("so xe\\s*:?\\s*([a-z0-9][a-z0-9.\\-]{3,})");
     private static final Pattern P_ID = Pattern.compile("(?<!\\d)\\d{12,20}(?!\\d)");
     private static final Pattern P_TOTAL = Pattern.compile("tong sl pallet\\s*:\\s*(\\d+)");
+    private static final Pattern P_CASE = Pattern.compile("/\\s*(\\d+)\\s*case", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_LOC = Pattern.compile("v\\S{0,3}\\s+tr\\S{0,3}\\s*:\\s*\\|?\\s*([^|]+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_PROD = Pattern.compile("s\\S{0,3}n\\s+ph\\S{0,3}m\\s*:\\s*\\|?\\s*(\\d{6,10})\\s*-\\s*([^|]+)", Pattern.CASE_INSENSITIVE);
 
     static volatile boolean running;
 
@@ -51,7 +54,7 @@ public class ErrorWatcherService extends AccessibilityService {
     private int lastCount = -1;
     private String lastSo = "";
     private Set<String> lastIds = new LinkedHashSet<>();
-    private String curSo = "", curXe = "";
+    private String curSo = "", curXe = "", curAll = "";
     private int curTotal = -1;                       // "Tổng SL Pallet" trên PDA
     private List<String> curTexts = new ArrayList<>();
     private OrderCheck check;
@@ -83,7 +86,7 @@ public class ErrorWatcherService extends AccessibilityService {
                     && (pkg.equals(target) || pkg.equals(SYSTEM_UI))) {
                 String text = joinText(e.getText());
                 debug("TOAST[" + pkg + "] " + text);
-                if (prefs.findKeyword(text) != null) reportError(text, "Toast");
+                if (prefs.findKeyword(text) != null) { curAll = text; reportError(text, "Toast"); }
             }
             return;
         }
@@ -112,6 +115,7 @@ public class ErrorWatcherService extends AccessibilityService {
         if (!onScreen) { onErrorLine(null); return; }
 
         String all = String.join(" | ", texts);
+        curAll = all;
         String norm = Prefs.normalize(all);
         debug("MÀN HÌNH " + all);
 
@@ -191,7 +195,22 @@ public class ErrorWatcherService extends AccessibilityService {
         prefs.log("QUÉT " + result + ": " + (code.isEmpty() ? "(không rõ mã)" : code));
         if (!prefs.scanLogEnabled()) return;
         String ctx = (curSo.isEmpty() ? "" : "SO " + curSo) + (curXe.isEmpty() ? "" : " / Xe " + curXe);
-        scanLog.write(now(), result, code, ctx.trim(), shorten(message));
+        scanLog.write(now(), result, code, ctx.trim(), shorten(message), details(code));
+    }
+
+    /** [PalletID, SoCase, ViTri, MaSP, TenSP] lấy từ màn hình hiện tại (curAll). */
+    private String[] details(String code) {
+        String pid = "";
+        Matcher mi = P_ID.matcher(code == null ? "" : code);
+        if (mi.find()) pid = mi.group();
+        String cases = "", loc = "", sku = "", name = "";
+        Matcher m = P_CASE.matcher(curAll);
+        if (m.find()) cases = m.group(1);
+        m = P_LOC.matcher(curAll);
+        if (m.find()) loc = m.group(1).trim();
+        m = P_PROD.matcher(curAll);
+        if (m.find()) { sku = m.group(1); name = m.group(2).trim(); }
+        return new String[]{pid, cases, loc, sku, name};
     }
 
     /** Chỉ lấy chữ của các view đang hiển thị thật; mỗi view 1 phần tử. */

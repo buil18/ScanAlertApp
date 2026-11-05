@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
  *   Download/PdaBeeper/scan_2026-11-04.csv  (mở được bằng Excel, có BOM UTF-8 cho tiếng Việt)
  */
 final class ScanLog {
-    static final String HEADER = "Ngay,Gio,KetQua,MaQuet,DonHang_Xe,ThongBao\r\n";
+    static final String HEADER = "Ngay,Gio,KetQua,MaQuet,DonHang_Xe,ThongBao,PalletID,SoCase,ViTri,MaSP,TenSP\r\n";
     static final String FOLDER = "PdaBeeper";
 
     private final Context ctx;
@@ -35,13 +35,16 @@ final class ScanLog {
     static String today() { return new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(new Date()); }
     static String fileName(String day) { return "scan_" + day + ".csv"; }
 
-    void write(long timeMs, String result, String code, String field, String message) {
+    /** det = [PalletID, SoCase, ViTri, MaSP, TenSP] */
+    void write(long timeMs, String result, String code, String field, String message, String[] det) {
         Date d = new Date(timeMs);
         String day = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(d);
-        String row = day + "," + new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(d) + ","
-                + csv(result) + "," + csv(code) + "," + csv(field) + "," + csv(message) + "\r\n";
-        SheetUploader.get(ctx).enqueue(day, new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(d),
-                result, code, field, message);
+        String time = new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(d);
+        StringBuilder sb = new StringBuilder(day + "," + time + ","
+                + csv(result) + "," + csv(code) + "," + csv(field) + "," + csv(message));
+        for (String x : det) sb.append(',').append(csv(x));
+        final String row = sb.append("\r\n").toString();
+        SheetUploader.get(ctx).enqueue(day, time, result, code, field, message, det);
         io.execute(() -> {
             try { append(day, row); }
             catch (Exception e) { prefs.log("Lỗi ghi file CSV: " + e); }
