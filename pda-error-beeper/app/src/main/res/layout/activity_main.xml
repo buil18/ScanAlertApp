@@ -1,90 +1,227 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent">
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fillViewport="true">
 <LinearLayout
     android:layout_width="match_parent" android:layout_height="wrap_content"
     android:orientation="vertical" android:padding="16dp">
 
-    <TextView android:id="@+id/status" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:textSize="18sp" android:textStyle="bold"
-        android:paddingBottom="8dp" />
+    <!-- ===== Đầu trang: logo + tên app ===== -->
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingBottom="12dp">
+        <ImageView
+            android:layout_width="84dp" android:layout_height="84dp"
+            android:src="@drawable/app_logo" android:scaleType="fitCenter"
+            android:contentDescription="Logo ScanAlert" />
+        <LinearLayout
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:orientation="vertical" android:paddingStart="12dp">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="ScanAlert" android:textSize="28sp" android:textStyle="bold"
+                android:textColor="@color/brand_dark" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="Cảnh báo quét pallet · Kho Hóc Môn" android:textSize="14sp"
+                android:textColor="@color/ink_soft" />
+        </LinearLayout>
+    </LinearLayout>
 
-    <Button android:id="@+id/btnAccessibility" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:text="1. Mở cài đặt Trợ năng" />
-    <Button android:id="@+id/btnAppInfo" android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Mở Thông tin ứng dụng (⋮ → Cho phép cài đặt bị hạn chế)" />
+    <!-- ===== Trạng thái ===== -->
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp"
+        android:background="@drawable/bg_card">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="TRẠNG THÁI" android:textSize="12sp" android:textStyle="bold"
+            android:textColor="@color/ink_soft" />
+        <TextView android:id="@+id/status" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textSize="20sp" android:textStyle="bold"
+            android:paddingTop="4dp" android:paddingBottom="8dp" />
+        <Button android:id="@+id/btnAccessibility" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="52dp"
+            android:text="Mở cài đặt Trợ năng" android:textAllCaps="false" android:textSize="16sp"
+            android:textStyle="bold" android:textColor="#FFFFFF"
+            android:background="@drawable/btn_primary" />
+        <TextView android:id="@+id/tvCross" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textSize="15sp"
+            android:paddingTop="12dp" />
+        <TextView android:id="@+id/sheetStatus" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textSize="13sp"
+            android:textColor="@color/ink_soft" android:paddingTop="4dp" />
+    </LinearLayout>
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="16dp" android:text="Gói ứng dụng cần theo dõi:" />
-    <EditText android:id="@+id/targetPackage" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+    <!-- ===== Thử âm thanh ===== -->
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp"
+        android:layout_marginTop="12dp" android:background="@drawable/bg_card">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="THỬ ÂM THANH CẢNH BÁO" android:textSize="12sp" android:textStyle="bold"
+            android:textColor="@color/ink_soft" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:paddingTop="8dp">
+            <Button android:id="@+id/btnTestRed" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1" android:minHeight="56dp"
+                android:text="ĐỎ\nSai / thừa hàng" android:textAllCaps="false" android:textSize="13sp"
+                android:textStyle="bold" android:textColor="#FFFFFF"
+                android:background="@drawable/btn_red" />
+            <Button android:id="@+id/btnTestLoi" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1" android:minHeight="56dp"
+                android:layout_marginStart="8dp"
+                android:text="ĐỎ\nKhông tồn tại" android:textAllCaps="false" android:textSize="13sp"
+                android:textStyle="bold" android:textColor="#FFFFFF"
+                android:background="@drawable/btn_red" />
+            <Button android:id="@+id/btnTestAmber" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1" android:minHeight="56dp"
+                android:layout_marginStart="8dp"
+                android:text="CAM\nKhông kiểm tra được" android:textAllCaps="false" android:textSize="13sp"
+                android:textStyle="bold" android:textColor="#FFFFFF"
+                android:background="@drawable/btn_amber" />
+        </LinearLayout>
+    </LinearLayout>
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="8dp"
-        android:text="Từ khóa lỗi (mỗi dòng một từ khóa, không phân biệt hoa/thường/dấu):" />
-    <EditText android:id="@+id/keywords" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:inputType="textMultiLine" android:minLines="3"
-        android:gravity="top" />
+    <!-- ===== Nhật ký ===== -->
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp"
+        android:layout_marginTop="12dp" android:background="@drawable/bg_card">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="NHẬT KÝ" android:textSize="12sp" android:textStyle="bold"
+            android:textColor="@color/ink_soft" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:paddingTop="8dp">
+            <Button android:id="@+id/btnRefreshLog" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1" android:minHeight="48dp"
+                android:text="Làm mới" android:textAllCaps="false" android:textStyle="bold"
+                android:textColor="@color/brand" android:background="@drawable/btn_outline" />
+            <Button android:id="@+id/btnShareCsv" android:layout_width="0dp"
+                android:layout_height="wrap_content" android:layout_weight="1" android:minHeight="48dp"
+                android:layout_marginStart="8dp"
+                android:text="Chia sẻ log hôm nay" android:textAllCaps="false" android:textStyle="bold"
+                android:textColor="@color/brand" android:background="@drawable/btn_outline" />
+        </LinearLayout>
+        <TextView android:id="@+id/csvInfo" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textSize="12sp"
+            android:textColor="@color/ink_soft" android:paddingTop="8dp" />
+        <TextView android:id="@+id/log" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textIsSelectable="true"
+            android:typeface="monospace" android:textSize="12sp" android:paddingTop="8dp" />
+    </LinearLayout>
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="8dp" android:text="Số giây kêu bíp mỗi lần phát hiện:" />
-    <EditText android:id="@+id/beepSeconds" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:inputType="number" />
+    <!-- ===== Quản trị (Admin) ===== -->
+    <Button android:id="@+id/btnAdmin" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:minHeight="52dp"
+        android:layout_marginTop="12dp"
+        android:text="🔒 Cài đặt nâng cao (Admin)" android:textAllCaps="false" android:textSize="16sp"
+        android:textStyle="bold" android:textColor="@color/brand"
+        android:background="@drawable/btn_outline" />
 
-    <CheckBox android:id="@+id/scanLog" android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Ghi log mọi lần quét (OK / LỖI / XÓA) ra file CSV + Google Sheet" />
+    <LinearLayout android:id="@+id/adminPanel"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp" android:visibility="gone"
+        android:layout_marginTop="12dp" android:background="@drawable/bg_card">
 
-    <CheckBox android:id="@+id/debugLog" android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Chế độ dò (ghi lại chữ đọc được trên màn hình Heineken PDA)" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="CÀI ĐẶT NÂNG CAO" android:textSize="12sp" android:textStyle="bold"
+            android:textColor="@color/ink_soft" />
 
-    <Button android:id="@+id/btnSave" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:text="Lưu cấu hình" />
-    <Button android:id="@+id/btnTest" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:text="Thử tiếng bíp" />
+        <Button android:id="@+id/btnAppInfo" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginTop="8dp"
+            android:text="Thông tin ứng dụng (⋮ → Cho phép cài đặt bị hạn chế)"
+            android:textAllCaps="false" android:textStyle="bold"
+            android:textColor="@color/brand" android:background="@drawable/btn_outline" />
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="16dp" android:text="Kiểm tra chéo với GR (glassRUN)" android:textStyle="bold" />
-    <CheckBox android:id="@+id/crossCheck" android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Bật kiểm tra từng pallet: sai mã hàng / thừa pallet so với GR" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Mẫu mã hàng (regex, mặc định 1\\d{7} = 8 số bắt đầu bằng 1):" />
-    <EditText android:id="@+id/skuPattern" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:paddingTop="16dp" android:text="Gói ứng dụng cần theo dõi:" />
+        <EditText android:id="@+id/targetPackage" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="16dp" android:text="Gửi log lên Google Sheet" android:textStyle="bold" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Link Web App (https://script.google.com/macros/s/.../exec):" />
-    <EditText android:id="@+id/sheetUrl" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:inputType="textUri" android:singleLine="true" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Mã bí mật (TOKEN, giống trong Apps Script):" />
-    <EditText android:id="@+id/sheetToken" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:text="Tên máy / người quét (hiện trên Sheet):" />
-    <EditText android:id="@+id/deviceName" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
-    <Button android:id="@+id/btnSheetTest" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:text="Lưu &amp; gửi dòng thử lên Sheet" />
-    <TextView android:id="@+id/sheetStatus" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:textSize="12sp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:paddingTop="8dp"
+            android:text="Từ khóa lỗi (mỗi dòng một từ khóa, không phân biệt hoa/thường/dấu):" />
+        <EditText android:id="@+id/keywords" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="textMultiLine" android:minLines="3"
+            android:gravity="top" />
 
-    <Button android:id="@+id/btnShareCsv" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:text="Gửi / chia sẻ file log quét hôm nay" />
-    <TextView android:id="@+id/csvInfo" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:textSize="12sp" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:paddingTop="8dp" android:text="Số giây kêu cảnh báo ĐỎ mỗi lần phát hiện:" />
+        <EditText android:id="@+id/beepSeconds" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="number" />
 
-    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-        android:paddingTop="16dp" android:text="Nhật ký (mới nhất ở trên):" android:textStyle="bold" />
-    <Button android:id="@+id/btnRefreshLog" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:text="Làm mới / Xóa nhật ký (giữ lâu để xóa)" />
-    <TextView android:id="@+id/log" android:layout_width="match_parent"
-        android:layout_height="wrap_content" android:textIsSelectable="true"
-        android:typeface="monospace" android:textSize="12sp" />
+        <CheckBox android:id="@+id/scanLog" android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ghi log mọi lần quét (OK / LỖI / XÓA) ra file CSV + Google Sheet" />
+        <CheckBox android:id="@+id/debugLog" android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Chế độ dò (ghi lại chữ đọc được trên màn hình Heineken PDA)" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:paddingTop="16dp" android:text="Đối soát với GR" android:textStyle="bold" />
+        <CheckBox android:id="@+id/crossCheck" android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Bật đối soát từng pallet: sai mã hàng / thừa số lượng so với GR" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Mẫu mã hàng (regex, mặc định 1\\d{7} = 8 số bắt đầu bằng 1):" />
+        <EditText android:id="@+id/skuPattern" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:paddingTop="16dp" android:text="Dữ liệu GR (hộp thư đối soát)" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Link Web App của hộp thư (…/exec):" />
+        <EditText android:id="@+id/grUrl" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="textUri" android:singleLine="true" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Khóa PDA (chạy hienKhoaPda trong Apps Script để xem):" />
+        <EditText android:id="@+id/grKey" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:paddingTop="16dp" android:text="Gửi log lên Google Sheet" android:textStyle="bold" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Link Web App (https://script.google.com/macros/s/.../exec):" />
+        <EditText android:id="@+id/sheetUrl" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="textUri" android:singleLine="true" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Mã bí mật (TOKEN, giống trong Apps Script):" />
+        <EditText android:id="@+id/sheetToken" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Tên máy / người quét (hiện trên Sheet):" />
+        <EditText android:id="@+id/deviceName" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:inputType="text" android:singleLine="true" />
+
+        <Button android:id="@+id/btnSave" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="52dp" android:layout_marginTop="16dp"
+            android:text="Lưu cấu hình" android:textAllCaps="false" android:textSize="16sp"
+            android:textStyle="bold" android:textColor="#FFFFFF" android:background="@drawable/btn_primary" />
+        <Button android:id="@+id/btnSheetTest" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginTop="8dp"
+            android:text="Lưu và gửi dòng thử lên Sheet" android:textAllCaps="false" android:textStyle="bold"
+            android:textColor="@color/brand" android:background="@drawable/btn_outline" />
+        <Button android:id="@+id/btnChangePin" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginTop="8dp"
+            android:text="Đổi mã PIN Admin" android:textAllCaps="false" android:textStyle="bold"
+            android:textColor="@color/brand" android:background="@drawable/btn_outline" />
+        <Button android:id="@+id/btnLock" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginTop="8dp"
+            android:text="🔒 Khóa lại" android:textAllCaps="false" android:textStyle="bold"
+            android:textColor="#FFFFFF" android:background="@drawable/btn_red" />
+    </LinearLayout>
+
+    <!-- ===== Giới thiệu ===== -->
+    <LinearLayout
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:padding="16dp"
+        android:layout_marginTop="12dp" android:background="@drawable/bg_card">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="GIỚI THIỆU" android:textSize="12sp" android:textStyle="bold"
+            android:textColor="@color/ink_soft" />
+        <TextView android:id="@+id/tvAbout" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textSize="14sp" android:paddingTop="6dp"
+            android:lineSpacingExtra="3dp" />
+    </LinearLayout>
+
 </LinearLayout>
 </ScrollView>

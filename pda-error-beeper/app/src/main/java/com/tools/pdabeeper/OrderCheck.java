@@ -30,7 +30,7 @@ final class OrderCheck {
     static final long REFRESH_MS = 5 * 60 * 1000;
 
     /** Dòng hàng của đơn theo GR (đã gộp theo mã hàng). */
-    static final class Line { String sku, name; double qty; int perPallet; int maxPallets; }
+    static final class Line { String sku, name; double qty, fullQty; int perPallet; int maxPallets; }
 
     static final class Expect {
         String so, fetchedAt; long fetchedMs;
@@ -73,7 +73,7 @@ final class OrderCheck {
 
     /** Tải (hoặc tải lại sau REFRESH_MS) dữ liệu GR của SO; kết quả trả về luồng chính. */
     void ensure(String so, boolean force, Listener l) {
-        if (so == null || so.isEmpty() || prefs.sheetUrl().isEmpty()) return;
+        if (so == null || so.isEmpty() || (prefs.grUrl().isEmpty() && prefs.sheetUrl().isEmpty())) return;
         Expect cur = expect(so);
         if (!force && cur != null && System.currentTimeMillis() - cur.fetchedMs < REFRESH_MS) return;
         if (Boolean.TRUE.equals(loading.get(so))) return;
@@ -85,7 +85,7 @@ final class OrderCheck {
                 if (j.optBoolean("ok")) {
                     got = parse(so, j);
                     sp.edit().putString("exp_" + so, j.toString()).apply();
-                } else err = j.optString("reason", "không rõ lý do");
+                } else err = j.optString("reason", "key".equals(j.optString("error")) ? "sai khóa PDA" : "không rõ lý do");
             } catch (Exception ex) { err = "Lỗi mạng: " + ex.getMessage(); }
             final Expect fg = got; final String fe = err;
             main.post(() -> {
@@ -97,9 +97,16 @@ final class OrderCheck {
     }
 
     private JSONObject fetch(String so) throws Exception {
-        String url = prefs.sheetUrl() + (prefs.sheetUrl().contains("?") ? "&" : "?")
-                + "op=pda&so=" + URLEncoder.encode(so, "UTF-8")
-                + "&token=" + URLEncoder.encode(prefs.sheetToken(), "UTF-8");
+        String url;
+        if (!prefs.grUrl().isEmpty()) {          // hộp thư đối soát: op=pda, khóa PDA chỉ đọc
+            url = prefs.grUrl() + (prefs.grUrl().contains("?") ? "&" : "?")
+                    + "op=pda&so=" + URLEncoder.encode(so, "UTF-8")
+                    + "&k=" + URLEncoder.encode(prefs.grKey(), "UTF-8");
+        } else {                                 // cách cũ: Web App log
+            url = prefs.sheetUrl() + (prefs.sheetUrl().contains("?") ? "&" : "?")
+                    + "op=pda&so=" + URLEncoder.encode(so, "UTF-8")
+                    + "&token=" + URLEncoder.encode(prefs.sheetToken(), "UTF-8");
+        }
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setConnectTimeout(15000); c.setReadTimeout(20000);
         c.setInstanceFollowRedirects(true);
@@ -129,6 +136,7 @@ final class OrderCheck {
             l.qty = o.optDouble("qty", 0);
             l.perPallet = o.optInt("perPallet", 0);
             l.maxPallets = o.optInt("maxPallets", -1);     // -1 = chưa có quy cách
+            l.fullQty = o.has("fullQty") ? o.optDouble("fullQty", l.qty) : l.qty;   // phần chẵn pallet; phần lẻ không quét
             e.lines.put(l.sku, l);
         }
         return e;
@@ -237,10 +245,15 @@ final class OrderCheck {
         StringBuilder sb = new StringBuilder();
         for (Line l : e.lines.values()) {
             Double got = sum.get(l.sku);
-            double s = got == null ? 0 : got, d = s - l.qty;
-            if (Math.abs(d) > 1e-9)
+            double s = got == null ? 0 : got;
+            double need = l.fullQty;                       // phải quét đủ phần chẵn pallet (phần lẻ không bắt buộc)
+            double loose = l.qty - l.fullQty;
+            if (s < need - 1e-9)
+                sb.append(l.sku).append(": quét ").append(fmt(s)).append(" / GR ").append(fmt(need))
+                  .append(" (thiếu ").append(fmt(need - s)).append(loose > 1e-9 ? "; lẻ " + fmt(loose) + " không quét" : "").append("); ");
+            else if (s > l.qty + 1e-9)
                 sb.append(l.sku).append(": quét ").append(fmt(s)).append(" / GR ").append(fmt(l.qty))
-                  .append(d < 0 ? " (thiếu " + fmt(-d) + ")" : " (thừa " + fmt(d) + ")").append("; ");
+                  .append(" (thừa ").append(fmt(s - l.qty)).append("); ");
         }
         for (String sku : sum.keySet()) if (!e.lines.containsKey(sku)) sb.append("mã ").append(sku).append(" không có trong đơn; ");
         if (noSku) sb.append("có pallet chưa rõ mã hàng; ");

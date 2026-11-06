@@ -61,6 +61,7 @@ public class ErrorWatcherService extends AccessibilityService {
     private Overlay overlay;
     private String errorPallet;                      // pallet đang bị báo đỏ (xóa thì ẩn cảnh báo)
     private final java.util.Set<String> doneSummary = new java.util.HashSet<>();
+    private final java.util.Set<String> noDataWarned = new java.util.HashSet<>();   // SO đã bíp cảnh báo "chưa có dữ liệu GR"
     private final java.util.Map<String, PalletInfo> palletCache = new java.util.LinkedHashMap<>();
 
     /** Thông tin 1 pallet đọc từ màn hình PDA. */
@@ -78,6 +79,7 @@ public class ErrorWatcherService extends AccessibilityService {
         scanLog = new ScanLog(this, prefs);
         check = new OrderCheck(this, prefs);
         overlay = new Overlay(this);
+        overlay.setOnTap(() -> alarm.stop());            // chạm vào dải cảnh báo thì tắt còi
         SheetUploader.get(this).flushAsync();             // gửi nốt các dòng còn tồn
         prefs.log("Dịch vụ đã BẬT (v" + BuildConfigVersion.NAME + "), theo dõi: " + prefs.targetPackage());
     }
@@ -186,7 +188,8 @@ public class ErrorWatcherService extends AccessibilityService {
         long t = now();
         if (errorLine == null) {
             if (lastErrorLine != null && t - errorLastSeen > ERROR_GONE_MS) lastErrorLine = null;
-            if (alarm.isPlaying() && lastErrorLine == null) alarm.stop();
+            // chỉ tắt còi của "lỗi dòng chữ PDA" khi dòng lỗi đã biến mất; còi SAI HÀNG/THỪA do kiểm tra chéo tự quản lý
+            if (alarm.isPlaying() && alarm.kind() == Alarm.Kind.LOI && lastErrorLine == null) alarm.stop();
             return;
         }
         boolean isNew = !errorLine.equals(lastErrorLine);
@@ -198,7 +201,8 @@ public class ErrorWatcherService extends AccessibilityService {
     private void reportError(String text, String source) {
         String kw = prefs.findKeyword(text);
         prefs.log("BÍP (" + source + ", từ khóa \"" + kw + "\") ← " + shorten(text));
-        alarm.start(prefs.beepSeconds());
+        alarm.start(prefs.beepSeconds(), Alarm.Kind.LOI);
+        overlay.show(Overlay.Level.ERROR, "⛔ LỖI TỪ PDA\n" + shorten(text) + "\n→ Xóa pallet này trên PDA", 8000);
         record("LOI", String.join(" ", extractIds(text)), text);
     }
 
@@ -253,7 +257,9 @@ public class ErrorWatcherService extends AccessibilityService {
                     + "\n" + error + "\nKHÔNG kiểm tra chéo được");
             return;
         }
+        double loose = 0; for (OrderCheck.Line l : e.lines.values()) loose += l.qty - l.fullQty;
         prefs.log("GR " + so + ": " + e.lines.size() + " mã hàng, tổng " + OrderCheck.fmt(e.totalQty())
+                + (loose > 1e-9 ? " (lẻ không quét " + OrderCheck.fmt(loose) + ")" : "")
                 + (error != null ? " (dùng bản lưu trên máy – " + error + ")" : ""));
     }
 
@@ -272,12 +278,15 @@ public class ErrorWatcherService extends AccessibilityService {
             case OVER:
                 errorPallet = pid;
                 alarm.start(Math.max(prefs.beepSeconds(), 3), Alarm.Kind.SAI);
-                overlay.show(Overlay.Level.ERROR, "⛔ " + v.msg + "\nPallet " + pid + "\n→ Xóa pallet này trên PDA");
+                overlay.show(Overlay.Level.ERROR, "⛔ " + (v.kind == OrderCheck.Kind.WRONG_SKU ? "SAI MÃ HÀNG" : "THỪA SỐ LƯỢNG")
+                        + "\n" + v.msg + "\nPallet " + pid + "\n→ Xóa pallet này trên PDA");
                 prefs.log("BÍP SAI ← " + v.msg + " | pallet " + pid);
                 record(v.kind == OrderCheck.Kind.WRONG_SKU ? "SAI_HANG" : "THUA_SL", pid, v.msg);
                 break;
-            default:   // NO_DATA, UNKNOWN_SKU, NO_QTY
-                overlay.show(Overlay.Level.WARN, "⚠ " + v.msg);
+            default:   // NO_DATA, UNKNOWN_SKU, NO_QTY  -> CAM: 2 tiếng bíp ngắn + rung nhẹ
+                overlay.show(Overlay.Level.WARN, "⚠ KHÔNG KIỂM TRA ĐƯỢC\n" + v.msg);
+                // thiếu dữ liệu GR của cả đơn thì chỉ bíp 1 lần cho mỗi đơn, tránh kêu liên tục mỗi pallet
+                if (v.kind != OrderCheck.Kind.NO_DATA || noDataWarned.add(so)) alarm.start(1, Alarm.Kind.CANH_BAO);
                 record("OK_CHUA_DOI_CHIEU", pid, v.msg);
         }
     }

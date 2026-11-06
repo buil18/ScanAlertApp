@@ -75,9 +75,40 @@ final class Prefs {
         sp.edit().putBoolean("cross", on).putString("skuPat", pat.trim().isEmpty() ? "1\\d{7}" : pat.trim()).apply();
     }
 
+    // --- PIN quản trị (Admin) ---
+    boolean hasPin() { return sp.contains("pinHash"); }
+
+    void setPin(String pin) {
+        byte[] b = new byte[8];
+        new java.security.SecureRandom().nextBytes(b);
+        StringBuilder salt = new StringBuilder();
+        for (byte x : b) salt.append(String.format(Locale.ROOT, "%02x", x));
+        sp.edit().putString("pinSalt", salt.toString()).putString("pinHash", hashPin(salt.toString(), pin)).apply();
+    }
+
+    boolean checkPin(String pin) {
+        String h = sp.getString("pinHash", null);
+        return h != null && h.equals(hashPin(sp.getString("pinSalt", ""), pin));
+    }
+
+    private static String hashPin(String salt, String pin) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest((salt + ":" + pin).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte x : d) sb.append(String.format(Locale.ROOT, "%02x", x));
+            return sb.toString();
+        } catch (Exception e) { return ""; }
+    }
+
     // --- Google Sheet ---
     String sheetUrl()   { return sp.getString("sheetUrl", "").trim(); }
     String sheetToken() { return sp.getString("sheetToken", "").trim(); }
+    String grUrl()      { return sp.getString("grUrl", "").trim(); }
+    String grKey()      { return sp.getString("grKey", "").trim(); }
+    void saveGr(String url, String key) {
+        sp.edit().putString("grUrl", url.trim()).putString("grKey", key.trim()).apply();
+    }
     String deviceName() { return sp.getString("device", android.os.Build.MODEL).trim(); }
     void saveSheet(String url, String token, String device) {
         sp.edit().putString("sheetUrl", url.trim()).putString("sheetToken", token.trim())

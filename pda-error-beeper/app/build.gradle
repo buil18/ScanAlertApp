@@ -8,8 +8,8 @@ android {
         applicationId 'com.tools.pdabeeper'
         minSdk 26
         targetSdk 33
-        versionCode 7
-        versionName '1.5'
+        versionCode 9
+        versionName '1.7'
     }
 
     // Keystore cố định trong repo => mọi bản build có cùng chữ ký,

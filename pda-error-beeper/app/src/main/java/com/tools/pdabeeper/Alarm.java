@@ -8,9 +8,16 @@ import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 
-/** Phát bíp to trên luồng ALARM (không bị ảnh hưởng bởi âm lượng media/chuông), tự trả lại âm lượng cũ. */
+/**
+ * Phát bíp to trên luồng ALARM (không bị ảnh hưởng bởi âm lượng media/chuông), tự trả lại âm lượng cũ.
+ * Ba kiểu cảnh báo:
+ *   SAI      = ĐỎ: còi 2 tông + rung dài (sai mã hàng / thừa số lượng)
+ *   LOI      = ĐỎ: bíp ngắt quãng + rung (pallet không tồn tại, lỗi từ PDA)
+ *   CANH_BAO = CAM: 2 tiếng bíp ngắn + rung nhẹ (không kiểm tra được, cần xem lại)
+ */
 final class Alarm {
-    private static final long BEEP_ON_MS = 350, BEEP_OFF_MS = 150;
+    /** Thứ tự mức độ: kiểu thấp hơn không được ghi đè kiểu đang kêu cao hơn. */
+    enum Kind { CANH_BAO, LOI, SAI }
 
     private final Context ctx;
     private final Handler h = new Handler(Looper.getMainLooper());
@@ -18,21 +25,28 @@ final class Alarm {
     private int savedVolume = -1;
     private long endAt;
     private boolean playing;
+    private Kind kind = Kind.LOI;
 
     Alarm(Context c) { ctx = c.getApplicationContext(); }
 
     boolean isPlaying() { return playing; }
-
-    /** Kiểu bíp: LOI = bíp ngắt quãng (pallet không tồn tại); SAI = còi 2 tông (sai hàng / thừa pallet). */
-    enum Kind { LOI, SAI }
-    private Kind kind = Kind.LOI;
+    Kind kind() { return kind; }
 
     void start(int seconds) { start(seconds, Kind.LOI); }
 
     void start(int seconds, Kind k) {
+        long dur = k == Kind.CANH_BAO ? 650 : seconds * 1000L;
+        long newEnd = System.currentTimeMillis() + dur;
+        if (playing) {
+            if (k.ordinal() < kind.ordinal()) return;            // đang kêu mức cao hơn thì giữ nguyên
+            boolean upgraded = k.ordinal() > kind.ordinal();
+            kind = k;
+            endAt = Math.max(endAt, newEnd);
+            if (upgraded) vibrate(k);
+            return;
+        }
         kind = k;
-        endAt = System.currentTimeMillis() + seconds * 1000L;
-        if (playing) return;           // đang kêu thì chỉ gia hạn
+        endAt = newEnd;
         playing = true;
 
         AudioManager am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
@@ -44,22 +58,30 @@ final class Alarm {
         try { tone = new ToneGenerator(AudioManager.STREAM_ALARM, ToneGenerator.MAX_VOLUME); }
         catch (RuntimeException e) { tone = null; }
 
-        Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
-        if (v != null && v.hasVibrator()) {
-            long[] pattern = k == Kind.SAI ? new long[]{0, 1200, 200, 1200}
-                                           : new long[]{0, 400, 150, 400, 150, 400};
-            v.vibrate(VibrationEffect.createWaveform(pattern, -1));
-        }
+        vibrate(k);
         h.post(loop);
+    }
+
+    private void vibrate(Kind k) {
+        Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+        if (v == null || !v.hasVibrator()) return;
+        long[] pattern = k == Kind.SAI ? new long[]{0, 1200, 200, 1200}
+                : k == Kind.LOI ? new long[]{0, 400, 150, 400, 150, 400}
+                : new long[]{0, 150, 100, 150};
+        v.vibrate(VibrationEffect.createWaveform(pattern, -1));
     }
 
     private final Runnable loop = new Runnable() {
         @Override public void run() {
             if (!playing) return;
             if (System.currentTimeMillis() >= endAt) { stop(); return; }
-            if (tone != null) tone.startTone(kind == Kind.SAI ? ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK
-                                                              : ToneGenerator.TONE_CDMA_HIGH_L, (int) BEEP_ON_MS);
-            h.postDelayed(this, BEEP_ON_MS + BEEP_OFF_MS);
+            boolean amber = kind == Kind.CANH_BAO;
+            int on = amber ? 200 : 350, off = amber ? 120 : 150;
+            int type = kind == Kind.SAI ? ToneGenerator.TONE_CDMA_EMERGENCY_RINGBACK
+                    : amber ? ToneGenerator.TONE_PROP_BEEP
+                    : ToneGenerator.TONE_CDMA_HIGH_L;
+            if (tone != null) tone.startTone(type, on);
+            h.postDelayed(this, on + off);
         }
     };
 
@@ -68,6 +90,10 @@ final class Alarm {
         playing = false;
         h.removeCallbacks(loop);
         if (tone != null) { tone.stopTone(); tone.release(); tone = null; }
+        try {
+            Vibrator v = (Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v != null) v.cancel();
+        } catch (Exception ignored) { }
         if (savedVolume >= 0) {
             final int vol = savedVolume;
             // trả âm lượng sau khi tiếng bíp cuối kết thúc
