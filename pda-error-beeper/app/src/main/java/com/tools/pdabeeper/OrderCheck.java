@@ -161,6 +161,16 @@ final class OrderCheck {
 
     int tallySize(String so) { return tally(so).length(); }
 
+    /** Số pallet đã ghi mà đọc được cả mã hàng lẫn số lượng. */
+    int resolvedCount(String so) {
+        JSONObject t = tally(so); int n = 0;
+        for (Iterator<String> it = t.keys(); it.hasNext(); ) {
+            String[] p = split(t.optString(it.next()));
+            if (!p[0].isEmpty() && num(p[1]) >= 0) n++;
+        }
+        return n;
+    }
+
     void remove(String so, String pallet) {
         JSONObject t = tally(so);
         t.remove(pallet);

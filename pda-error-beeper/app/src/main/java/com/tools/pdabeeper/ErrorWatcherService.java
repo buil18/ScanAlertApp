@@ -26,7 +26,9 @@ import java.util.regex.Pattern;
  * Kèm Sales order + Số xe đang hiển thị trên màn hình.
  */
 public class ErrorWatcherService extends AccessibilityService {
-    private static final long SCAN_DEBOUNCE_MS = 250;
+    private static final long SCAN_FIRST_MS = 120;      // đọc màn hình tối đa 0,12 s sau thay đổi đầu tiên (không chờ yên mới đọc)
+    private static final long SCAN_SETTLE_MS = 350;     // đọc thêm 1 lần khi màn hình đã yên
+    private static final long PENDING_WARN_MS = 2500;   // pallet vẫn chưa rõ mã/số lượng sau ngần này thì mới báo cam
     private static final long ERROR_GONE_MS = 1500;     // dòng lỗi biến mất >1,5s mới tính là lỗi mới
     private static final int MAX_NODES = 600;
     private static final String SYSTEM_UI = "com.android.systemui";
@@ -70,7 +72,20 @@ public class ErrorWatcherService extends AccessibilityService {
         double qty = -1;     // -1 = không đọc được
     }
 
-    private final Runnable scan = this::scanWindows;
+    private boolean scanQueued;
+    private final Runnable scanTail = this::scanWindows;
+    private final Runnable scan = () -> {
+        scanQueued = false;
+        scanWindows();
+        h.removeCallbacks(scanTail);
+        h.postDelayed(scanTail, SCAN_SETTLE_MS);
+    };
+    private final Runnable pendingCheck = this::warnPending;
+    // pallet đã thấy mã nhưng chưa đọc được mã hàng/số lượng: pid -> SO, và thời điểm thấy
+    private final java.util.Map<String, String> pending = new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, Long> pendingAt = new java.util.HashMap<>();
+    private final java.util.Set<String> pendingWarned = new java.util.HashSet<>();
+    private final java.util.Set<String> incompleteWarned = new java.util.HashSet<>();
 
     @Override protected void onServiceConnected() {
         running = true;
@@ -99,8 +114,10 @@ public class ErrorWatcherService extends AccessibilityService {
             return;
         }
         if (!pkg.equals(target) && e.getEventType() != AccessibilityEvent.TYPE_WINDOWS_CHANGED) return;
-        h.removeCallbacks(scan);
-        h.postDelayed(scan, SCAN_DEBOUNCE_MS);
+        if (!scanQueued) {                       // không dời lịch đọc mỗi khi có sự kiện mới, tránh quét nhanh bị bỏ lỡ
+            scanQueued = true;
+            h.postDelayed(scan, SCAN_FIRST_MS);
+        }
     }
 
     // ===================== ĐỌC MÀN HÌNH =====================
@@ -150,7 +167,15 @@ public class ErrorWatcherService extends AccessibilityService {
         if (palletCache.size() > 300) palletCache.clear();
         for (String pid : ids) {                                  // đọc mã hàng + số lượng của từng pallet đang hiện
             PalletInfo pi = parseInfo(pid, check.expect(so));
-            if (pi != null) palletCache.put(pid, pi);
+            if (pi != null) {
+                PalletInfo old = palletCache.get(pid);
+                if (old != null) {                                // giữ phần đã đọc được từ lần trước
+                    if (pi.sku == null && old.sku != null) { pi.sku = old.sku; if (pi.name.isEmpty()) pi.name = old.name; }
+                    if (pi.qty < 0 && old.qty >= 0) { pi.qty = old.qty; if (pi.unit.isEmpty()) pi.unit = old.unit; }
+                    if (pi.loc.isEmpty()) pi.loc = old.loc;
+                }
+                palletCache.put(pid, pi);
+            }
         }
 
         boolean countUp = false;
@@ -177,6 +202,20 @@ public class ErrorWatcherService extends AccessibilityService {
             lastCount = count;
             lastSo = so;
             lastIds = ids;
+        }
+
+        if (prefs.crossCheck() && !so.isEmpty() && count >= 0) {
+            resolvePending();
+            // bộ đếm PDA lớn hơn số pallet app đã ghi: pallet nào đang hiện mà chưa ghi thì ghi bù
+            if (check.tallySize(so) < count) {
+                Set<String> errIds = errorLine == null ? new LinkedHashSet<>() : extractIds(errorLine);
+                for (String pid : ids) {
+                    if (check.tallySize(so) >= count) break;
+                    if (errIds.contains(pid) || check.known(so, pid)) continue;
+                    onPalletScanned(so, pid, count);
+                }
+            }
+            checkCompletion(so, count);
         }
 
         // quét đúng (bộ đếm tăng) thì không coi dòng lỗi cũ còn sót là lỗi mới
@@ -268,7 +307,20 @@ public class ErrorWatcherService extends AccessibilityService {
         check.ensure(so, false, this::onExpectLoaded);           // làm mới định kỳ
         PalletInfo pi = palletCache.get(pid);
         String sku = pi == null ? null : pi.sku;
-        OrderCheck.Verdict v = check.onScan(so, pid, sku, pi == null ? -1 : pi.qty);
+        double qty = pi == null ? -1 : pi.qty;
+        OrderCheck.Verdict v = check.onScan(so, pid, sku, qty);
+        if ((sku == null || qty < 0) && check.expect(so) != null) {
+            // quét nhanh: dòng mã hàng/số lượng chưa hiện kịp. Ghi nhớ, đọc bù ở lần đọc sau, chưa báo ngay.
+            pending.put(pid, so);
+            pendingAt.put(pid, now());
+            h.removeCallbacks(pendingCheck);
+            h.postDelayed(pendingCheck, PENDING_WARN_MS);
+            return;
+        }
+        applyVerdict(so, pid, sku, v);
+    }
+
+    private void applyVerdict(String so, String pid, String sku, OrderCheck.Verdict v) {
         switch (v.kind) {
             case OK:
                 overlay.show(Overlay.Level.OK, v.msg);
@@ -291,6 +343,45 @@ public class ErrorWatcherService extends AccessibilityService {
         }
     }
 
+    /** Pallet đang chờ: nếu giờ đã đọc được mã hàng + số lượng thì đối chiếu như bình thường (đọc bù). */
+    private void resolvePending() {
+        if (pending.isEmpty()) return;
+        for (java.util.Iterator<java.util.Map.Entry<String, String>> it = pending.entrySet().iterator(); it.hasNext(); ) {
+            java.util.Map.Entry<String, String> en = it.next();
+            String pid = en.getKey(), so = en.getValue();
+            if (!check.known(so, pid)) { it.remove(); pendingAt.remove(pid); continue; }   // đã bị xóa trên PDA
+            PalletInfo pi = palletCache.get(pid);
+            if (pi == null || pi.sku == null || pi.qty < 0) continue;
+            it.remove();
+            pendingAt.remove(pid);
+            OrderCheck.Verdict v = check.onScan(so, pid, pi.sku, pi.qty);
+            applyVerdict(so, pid, pi.sku, v);
+        }
+    }
+
+    /** Quá PENDING_WARN_MS mà vẫn chưa đọc rõ: báo cam 1 lần (pallet vẫn được đọc bù về sau nếu hiện lại). */
+    private void warnPending() {
+        long t = now();
+        StringBuilder ids = new StringBuilder();
+        int n = 0;
+        for (String pid : pending.keySet()) {
+            Long at = pendingAt.get(pid);
+            if (at != null && t - at >= PENDING_WARN_MS - 50 && pendingWarned.add(pid)) {
+                if (n++ < 3) ids.append(pid).append(' ');
+                record("OK_CHUA_DOI_CHIEU", pid, "Chưa đọc rõ mã hàng/số lượng, sẽ đọc bù khi hiện lại");
+            }
+        }
+        if (n > 0) {
+            overlay.show(Overlay.Level.WARN, "⚠ " + n + " pallet chưa đọc rõ mã hàng\n" + ids.toString().trim()
+                    + "\nApp sẽ đọc bù khi pallet hiện lại trên màn hình");
+            alarm.start(1, Alarm.Kind.CANH_BAO);
+        }
+        if (!pending.isEmpty()) {
+            h.removeCallbacks(pendingCheck);
+            h.postDelayed(pendingCheck, PENDING_WARN_MS);
+        }
+    }
+
     private void onPalletRemoved(String so, String pid) {
         if (!prefs.crossCheck()) return;
         check.remove(so, pid);
@@ -302,7 +393,19 @@ public class ErrorWatcherService extends AccessibilityService {
     }
 
     private void checkCompletion(String so, int count) {
-        if (!prefs.crossCheck() || curTotal <= 0 || count < curTotal || !doneSummary.add(so)) return;
+        if (!prefs.crossCheck() || curTotal <= 0 || count < curTotal || doneSummary.contains(so)) return;
+        int unclear = count - check.resolvedCount(so);           // pallet PDA đã nhận nhưng app chưa đọc rõ mã hàng + số lượng
+        if (unclear > 0) {
+            if (incompleteWarned.add(so + "|" + unclear)) {
+                overlay.show(Overlay.Level.WARN, "⚠ PDA đủ " + count + "/" + curTotal + " pallet\nApp mới đọc rõ " + (count - unclear)
+                        + " pallet, còn " + unclear + " pallet chưa rõ mã hàng\nChưa kết luận đủ/thiếu – kéo chậm danh sách PDA để app đọc bù");
+                if (incompleteWarned.size() == 1 || incompleteWarned.stream().noneMatch(x -> x.startsWith(so + "|") && !x.equals(so + "|" + unclear)))
+                    alarm.start(1, Alarm.Kind.CANH_BAO);
+                record("TONG_KET_CHUA_DU", "", "PDA " + count + "/" + curTotal + ", app đọc rõ " + (count - unclear) + ", còn " + unclear + " pallet chưa rõ");
+            }
+            return;
+        }
+        doneSummary.add(so);
         String diff = check.summary(so);
         if (diff == null) {
             overlay.show(Overlay.Level.OK, "✅ ĐỦ " + count + "/" + curTotal + " pallet – KHỚP GR từng mã hàng");
