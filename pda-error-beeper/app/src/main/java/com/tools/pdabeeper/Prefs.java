@@ -13,7 +13,10 @@ import java.util.Locale;
 /** Cấu hình + nhật ký đơn giản, lưu trong SharedPreferences. */
 final class Prefs {
     static final String DEFAULT_PACKAGE = "com.heineken.cmobilepda";
-    static final String DEFAULT_KEYWORDS = "khong ton tai\nnot exist";
+    static final String DEFAULT_KEYWORDS = "khong ton tai\nnot exist\nda duoc ghi nhan\ntong sl pallet da quet phai bang";
+    /** Link Web App đặt sẵn để máy mới không phải gõ lại. Khóa/TOKEN KHÔNG đặt sẵn, nhập tay trên từng máy. */
+    static final String DEFAULT_LOG_URL = "https://script.google.com/macros/s/AKfycby2TwuADMNJsSpn2i24Qd68GFUdZjqC7G5a5Wh__qST_1qW8UJ4VqbXl1aScccc1Hwtzg/exec";
+    static final String DEFAULT_GR_URL  = "https://script.google.com/macros/s/AKfycby6aXZjQrJglYTeQwQN2wZVkgkFSE9_6QnXrE6uEjIQYjVl1kA5ke5t0fcrfyqhQFGkqA/exec";
     private static final int MAX_LOG_CHARS = 8000;
 
     private final SharedPreferences sp;
@@ -102,9 +105,9 @@ final class Prefs {
     }
 
     // --- Google Sheet ---
-    String sheetUrl()   { return sp.getString("sheetUrl", "").trim(); }
+    String sheetUrl()   { String v = sp.getString("sheetUrl", "").trim(); return v.isEmpty() ? DEFAULT_LOG_URL : v; }
     String sheetToken() { return sp.getString("sheetToken", "").trim(); }
-    String grUrl()      { return sp.getString("grUrl", "").trim(); }
+    String grUrl()      { String v = sp.getString("grUrl", "").trim(); return v.isEmpty() ? DEFAULT_GR_URL : v; }
     String grKey()      { return sp.getString("grKey", "").trim(); }
     void saveGr(String url, String key) {
         sp.edit().putString("grUrl", url.trim()).putString("grKey", key.trim()).apply();

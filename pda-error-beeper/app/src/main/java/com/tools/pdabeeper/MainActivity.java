@@ -231,7 +231,7 @@ public class MainActivity extends Activity {
         status.setTextColor(on ? 0xFF2E7D32 : 0xFFC62828);
         boolean cross = prefs.crossCheck();
         tvCross.setText((cross ? "✅ Đối soát GR: BẬT" : "⚪ Đối soát GR: TẮT")
-                + (prefs.sheetUrl().isEmpty() ? "   ·   ⚪ Chưa nối Google Sheet" : "   ·   ✅ Đã nối Google Sheet"));
+                + ((prefs.sheetUrl().isEmpty() || prefs.sheetToken().isEmpty()) ? "   ·   ⚪ Chưa nối Google Sheet (thiếu TOKEN)" : "   ·   ✅ Đã nối Google Sheet"));
     }
 
     @Override protected void onResume() {

@@ -45,7 +45,7 @@ final class SheetUploader {
         queue = new File(c.getFilesDir(), "sheet_queue.jsonl");
     }
 
-    boolean configured() { return !prefs.sheetUrl().isEmpty(); }
+    boolean configured() { return !prefs.sheetUrl().isEmpty() && !prefs.sheetToken().isEmpty(); }
     String status() { return lastStatus + " – đang chờ gửi: " + pendingCount() + " dòng"; }
 
     /** Thêm 1 dòng vào hàng đợi và gửi ngay. */
