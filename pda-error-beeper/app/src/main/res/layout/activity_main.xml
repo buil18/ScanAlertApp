@@ -122,6 +122,11 @@
         android:orientation="vertical" android:padding="16dp" android:visibility="gone"
         android:layout_marginTop="12dp" android:background="@drawable/bg_card">
 
+        <Button android:id="@+id/btnSim" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:minHeight="48dp"
+            android:text="🧪 Giả lập kiểm thử" android:textAllCaps="false" android:textStyle="bold"
+            android:textColor="@color/brand" android:background="@drawable/btn_outline" />
+
         <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:text="CÀI ĐẶT NÂNG CAO" android:textSize="12sp" android:textStyle="bold"
             android:textColor="@color/ink_soft" />

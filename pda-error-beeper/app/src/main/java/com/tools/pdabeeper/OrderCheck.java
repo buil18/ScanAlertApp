@@ -62,6 +62,15 @@ final class OrderCheck {
 
     // ================= dữ liệu GR =================
 
+    /** Số đơn giả lập luôn bắt đầu bằng 9900. */
+    static boolean isSim(String so) { return so != null && so.startsWith("9900"); }
+
+    /** Giả lập: đặt dữ liệu GR (null = chưa có) và xóa pallet đã ghi của đơn. */
+    void simPut(String so, Expect e) {
+        if (e == null) cache.remove(so); else { e.so = so; e.fetchedMs = System.currentTimeMillis(); cache.put(so, e); }
+        sp.edit().remove("exp_" + so).remove("tally_" + so).apply();
+    }
+
     Expect expect(String so) {
         Expect e = cache.get(so);
         if (e == null) {
@@ -73,6 +82,7 @@ final class OrderCheck {
 
     /** Tải (hoặc tải lại sau REFRESH_MS) dữ liệu GR của SO; kết quả trả về luồng chính. */
     void ensure(String so, boolean force, Listener l) {
+        if (isSim(so)) return;                                   // đơn giả lập: không gọi mạng
         if (so == null || so.isEmpty() || (prefs.grUrl().isEmpty() && prefs.sheetUrl().isEmpty())) return;
         Expect cur = expect(so);
         if (!force && cur != null && System.currentTimeMillis() - cur.fetchedMs < REFRESH_MS) return;

@@ -72,6 +72,7 @@ public class MainActivity extends Activity {
         findViewById(R.id.btnTestRed).setOnClickListener(v -> testAlarm.start(2, Alarm.Kind.SAI));
         findViewById(R.id.btnTestLoi).setOnClickListener(v -> testAlarm.start(2, Alarm.Kind.LOI));
         findViewById(R.id.btnTestAmber).setOnClickListener(v -> testAlarm.start(1, Alarm.Kind.CANH_BAO));
+        findViewById(R.id.btnSim).setOnClickListener(v -> startActivity(new Intent(this, SimActivity.class)));
         findViewById(R.id.btnShareCsv).setOnClickListener(v -> shareTodayCsv());
         Button refresh = findViewById(R.id.btnRefreshLog);
         refresh.setOnClickListener(v -> {

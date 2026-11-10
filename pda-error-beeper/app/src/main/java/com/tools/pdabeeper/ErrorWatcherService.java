@@ -43,6 +43,7 @@ public class ErrorWatcherService extends AccessibilityService {
     private static final Pattern P_PROD = Pattern.compile("s\\S{0,3}n\\s+ph\\S{0,3}m\\s*:\\s*\\|?\\s*(\\d{6,10})\\s*-\\s*([^|]+)", Pattern.CASE_INSENSITIVE);
 
     static volatile boolean running;
+    static volatile ErrorWatcherService instance;
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private Prefs prefs;
@@ -89,6 +90,7 @@ public class ErrorWatcherService extends AccessibilityService {
 
     @Override protected void onServiceConnected() {
         running = true;
+        instance = this;
         prefs = new Prefs(this);
         alarm = new Alarm(this);
         scanLog = new ScanLog(this, prefs);
@@ -138,7 +140,11 @@ public class ErrorWatcherService extends AccessibilityService {
             }
         }
         if (!onScreen) { onErrorLine(null); return; }
+        processScreen(texts);
+    }
 
+    /** Xử lý 1 màn hình đã đọc (thật hoặc giả lập). */
+    private void processScreen(List<String> texts) {
         String all = String.join(" | ", texts);
         curAll = all;
         String norm = Prefs.normalize(all.replace(" | ", " "));   // ô chữ ngăn bởi " | " làm hỏng nhãn "đã quét: N"
@@ -239,13 +245,14 @@ public class ErrorWatcherService extends AccessibilityService {
 
     private void reportError(String text, String source) {
         String kw = prefs.findKeyword(text);
-        prefs.log("BÍP (" + source + ", từ khóa \"" + kw + "\") ← " + shorten(text));
-        alarm.start(prefs.beepSeconds(), Alarm.Kind.LOI);
-        overlay.show(Overlay.Level.ERROR, "⛔ LỖI TỪ PDA\n" + shorten(text) + "\n→ Xóa pallet này trên PDA", 8000);
+        if (simEvents == null) prefs.log("BÍP (" + source + ", từ khóa \"" + kw + "\") ← " + shorten(text));
+        beep(prefs.beepSeconds(), Alarm.Kind.LOI);
+        showOv(Overlay.Level.ERROR, "⛔ LỖI TỪ PDA\n" + shorten(text) + "\n→ Xóa pallet này trên PDA", 8000);
         record("LOI", String.join(" ", extractIds(text)), text);
     }
 
     private void record(String result, String code, String message) {
+        if (simEvents != null) { simEvents.add("REC:" + result); return; }
         prefs.log("QUÉT " + result + ": " + (code.isEmpty() ? "(không rõ mã)" : code));
         if (!prefs.scanLogEnabled()) return;
         String ctx = (curSo.isEmpty() ? "" : "SO " + curSo) + (curXe.isEmpty() ? "" : " / Xe " + curXe);
@@ -292,7 +299,7 @@ public class ErrorWatcherService extends AccessibilityService {
     private void onExpectLoaded(String so, OrderCheck.Expect e, String error) {
         if (e == null) {
             prefs.log("GR " + so + ": " + error);
-            if (so.equals(curSo)) overlay.show(Overlay.Level.WARN, "⚠ Chưa có dữ liệu GR cho SO " + so
+            if (so.equals(curSo)) showOv(Overlay.Level.WARN, "⚠ Chưa có dữ liệu GR cho SO " + so
                     + "\n" + error + "\nKHÔNG kiểm tra chéo được");
             return;
         }
@@ -323,22 +330,22 @@ public class ErrorWatcherService extends AccessibilityService {
     private void applyVerdict(String so, String pid, String sku, OrderCheck.Verdict v) {
         switch (v.kind) {
             case OK:
-                overlay.show(Overlay.Level.OK, v.msg);
+                showOv(Overlay.Level.OK, v.msg);
                 record("OK", pid, (sku == null ? "" : sku + " ") + OrderCheck.fmt(v.scanned) + "/" + OrderCheck.fmt(v.max));
                 break;
             case WRONG_SKU:
             case OVER:
                 errorPallet = pid;
-                alarm.start(Math.max(prefs.beepSeconds(), 3), Alarm.Kind.SAI);
-                overlay.show(Overlay.Level.ERROR, "⛔ " + (v.kind == OrderCheck.Kind.WRONG_SKU ? "SAI MÃ HÀNG" : "THỪA SỐ LƯỢNG")
+                beep(Math.max(prefs.beepSeconds(), 3), Alarm.Kind.SAI);
+                showOv(Overlay.Level.ERROR, "⛔ " + (v.kind == OrderCheck.Kind.WRONG_SKU ? "SAI MÃ HÀNG" : "THỪA SỐ LƯỢNG")
                         + "\n" + v.msg + "\nPallet " + pid + "\n→ Xóa pallet này trên PDA");
-                prefs.log("BÍP SAI ← " + v.msg + " | pallet " + pid);
+                if (simEvents == null) prefs.log("BÍP SAI ← " + v.msg + " | pallet " + pid);
                 record(v.kind == OrderCheck.Kind.WRONG_SKU ? "SAI_HANG" : "THUA_SL", pid, v.msg);
                 break;
             default:   // NO_DATA, UNKNOWN_SKU, NO_QTY  -> CAM: 2 tiếng bíp ngắn + rung nhẹ
-                overlay.show(Overlay.Level.WARN, "⚠ KHÔNG KIỂM TRA ĐƯỢC\n" + v.msg);
+                showOv(Overlay.Level.WARN, "⚠ KHÔNG KIỂM TRA ĐƯỢC\n" + v.msg);
                 // thiếu dữ liệu GR của cả đơn thì chỉ bíp 1 lần cho mỗi đơn, tránh kêu liên tục mỗi pallet
-                if (v.kind != OrderCheck.Kind.NO_DATA || noDataWarned.add(so)) alarm.start(1, Alarm.Kind.CANH_BAO);
+                if (v.kind != OrderCheck.Kind.NO_DATA || noDataWarned.add(so)) beep(1, Alarm.Kind.CANH_BAO);
                 record("OK_CHUA_DOI_CHIEU", pid, v.msg);
         }
     }
@@ -372,9 +379,9 @@ public class ErrorWatcherService extends AccessibilityService {
             }
         }
         if (n > 0) {
-            overlay.show(Overlay.Level.WARN, "⚠ " + n + " pallet chưa đọc rõ mã hàng\n" + ids.toString().trim()
+            showOv(Overlay.Level.WARN, "⚠ " + n + " pallet chưa đọc rõ mã hàng\n" + ids.toString().trim()
                     + "\nApp sẽ đọc bù khi pallet hiện lại trên màn hình");
-            alarm.start(1, Alarm.Kind.CANH_BAO);
+            beep(1, Alarm.Kind.CANH_BAO);
         }
         if (!pending.isEmpty()) {
             h.removeCallbacks(pendingCheck);
@@ -387,8 +394,8 @@ public class ErrorWatcherService extends AccessibilityService {
         check.remove(so, pid);
         if (pid.equals(errorPallet)) {
             errorPallet = null;
-            alarm.stop();
-            overlay.show(Overlay.Level.OK, "Đã xóa pallet sai " + pid);
+            stopAlarm();
+            showOv(Overlay.Level.OK, "Đã xóa pallet sai " + pid);
         }
     }
 
@@ -397,10 +404,10 @@ public class ErrorWatcherService extends AccessibilityService {
         int unclear = count - check.resolvedCount(so);           // pallet PDA đã nhận nhưng app chưa đọc rõ mã hàng + số lượng
         if (unclear > 0) {
             if (incompleteWarned.add(so + "|" + unclear)) {
-                overlay.show(Overlay.Level.WARN, "⚠ PDA đủ " + count + "/" + curTotal + " pallet\nApp mới đọc rõ " + (count - unclear)
+                showOv(Overlay.Level.WARN, "⚠ PDA đủ " + count + "/" + curTotal + " pallet\nApp mới đọc rõ " + (count - unclear)
                         + " pallet, còn " + unclear + " pallet chưa rõ mã hàng\nChưa kết luận đủ/thiếu – kéo chậm danh sách PDA để app đọc bù");
                 if (incompleteWarned.size() == 1 || incompleteWarned.stream().noneMatch(x -> x.startsWith(so + "|") && !x.equals(so + "|" + unclear)))
-                    alarm.start(1, Alarm.Kind.CANH_BAO);
+                    beep(1, Alarm.Kind.CANH_BAO);
                 record("TONG_KET_CHUA_DU", "", "PDA " + count + "/" + curTotal + ", app đọc rõ " + (count - unclear) + ", còn " + unclear + " pallet chưa rõ");
             }
             return;
@@ -408,10 +415,10 @@ public class ErrorWatcherService extends AccessibilityService {
         doneSummary.add(so);
         String diff = check.summary(so);
         if (diff == null) {
-            overlay.show(Overlay.Level.OK, "✅ ĐỦ " + count + "/" + curTotal + " pallet – KHỚP GR từng mã hàng");
+            showOv(Overlay.Level.OK, "✅ ĐỦ " + count + "/" + curTotal + " pallet – KHỚP GR từng mã hàng");
             record("TONG_KET", "", "Khớp GR: " + count + "/" + curTotal);
         } else {
-            overlay.show(Overlay.Level.WARN, "⚠ Đủ " + count + " pallet nhưng LỆCH GR: " + diff);
+            showOv(Overlay.Level.WARN, "⚠ Đủ " + count + " pallet nhưng LỆCH GR: " + diff);
             record("TONG_KET_LECH", "", diff);
         }
     }
@@ -455,6 +462,62 @@ public class ErrorWatcherService extends AccessibilityService {
         return p;
     }
 
+
+    // ===================== GIẢ LẬP (màn hình Giả lập trong app) =====================
+
+    private java.util.List<String> simEvents;       // khác null = đang giả lập: không phát âm/ghi log thật
+    private boolean simSound;
+
+    private void beep(int seconds, Alarm.Kind k) {
+        if (simEvents != null) { simEvents.add("BIP:" + k.name()); if (!simSound) return; }
+        alarm.start(seconds, k);
+    }
+
+    private void showOv(Overlay.Level l, String t) { showOv(l, t, -1); }
+
+    private void showOv(Overlay.Level l, String t, long ms) {
+        if (simEvents != null) { simEvents.add("UI:" + l.name()); return; }
+        overlay.show(l, t, ms);
+    }
+
+    private void stopAlarm() {
+        if (simEvents != null) simEvents.add("STOP");
+        alarm.stop();
+    }
+
+    boolean simReady() { return prefs != null && check != null; }
+    boolean simCrossCheck() { return prefs.crossCheck(); }
+    boolean simKeywordOk() { return prefs.findKeyword("pallet id 1 khong ton tai") != null; }
+
+    /** Bắt đầu 1 kịch bản: đặt dữ liệu GR giả (null = đơn chưa có GR) và xóa trạng thái cũ. */
+    void simBegin(String so, OrderCheck.Expect exp, boolean sound) {
+        simClear(so);
+        check.simPut(so, exp);
+        simSound = sound;
+        simEvents = new ArrayList<>();
+    }
+
+    /** Kết thúc kịch bản, trả danh sách sự kiện đã xảy ra. */
+    List<String> simEnd(String so) {
+        List<String> ev = simEvents == null ? new ArrayList<>() : simEvents;
+        simEvents = null;
+        alarm.stop();
+        simClear(so);
+        check.simPut(so, null);
+        return ev;
+    }
+
+    void simScreen(List<String> texts) { processScreen(texts); }
+
+    private void simClear(String so) {
+        lastCount = -1; lastSo = ""; lastIds = new LinkedHashSet<>(); lastErrorLine = null; errorPallet = null;
+        curSo = ""; curXe = ""; curTotal = -1; curAll = "";
+        pending.clear(); pendingAt.clear(); pendingWarned.clear(); incompleteWarned.clear();
+        doneSummary.removeIf(OrderCheck::isSim); noDataWarned.removeIf(OrderCheck::isSim);
+        palletCache.clear();
+        h.removeCallbacks(pendingCheck);
+    }
+
     // ===================== tiện ích =====================
 
     private static Set<String> extractIds(String s) {
@@ -491,6 +554,7 @@ public class ErrorWatcherService extends AccessibilityService {
     @Override public void onInterrupt() { if (alarm != null) alarm.stop(); }
 
     @Override public void onDestroy() {
+        if (instance == this) instance = null;
         running = false;
         if (alarm != null) alarm.stop();
         if (prefs != null) prefs.log("Dịch vụ đã TẮT");

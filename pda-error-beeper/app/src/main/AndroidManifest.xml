@@ -20,6 +20,8 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".SimActivity" android:exported="false" />
+
         <service
             android:name=".ErrorWatcherService"
             android:exported="false"
