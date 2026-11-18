@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">ScanAlert</string>
+    <string name="service_label">ScanAlert – cảnh báo quét pallet</string>
+    <string name="service_description">Theo dõi màn hình quét của ứng dụng Heineken PDA để cảnh báo ngay khi pallet lỗi, sai mã hàng hoặc vượt số lượng so với đơn (GR) bằng tiếng bíp, rung và dải màu trên màn hình. Nhật ký quét chỉ được gửi tới Google Sheet do quản trị viên cấu hình (nếu có).</string>
+</resources>
