@@ -43,6 +43,21 @@
             android:text="Mở cài đặt Trợ năng" android:textAllCaps="false" android:textSize="16sp"
             android:textStyle="bold" android:textColor="#FFFFFF"
             android:background="@drawable/btn_primary" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Chế độ làm việc" android:textStyle="bold" android:textSize="15sp"
+            android:paddingTop="12dp" />
+        <RadioGroup android:id="@+id/rgMode" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="vertical">
+            <RadioButton android:id="@+id/rbAuto" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:minHeight="48dp" android:textSize="15sp"
+                android:text="Tự nhận theo màn hình PDA (khuyên dùng)" />
+            <RadioButton android:id="@+id/rbXh" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:minHeight="48dp" android:textSize="15sp"
+                android:text="🚚 Luôn là XUẤT HÀNG" />
+            <RadioButton android:id="@+id/rbSx" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:minHeight="48dp" android:textSize="15sp"
+                android:text="🏭 Luôn là NHẬP SẢN XUẤT" />
+        </RadioGroup>
         <TextView android:id="@+id/tvCross" android:layout_width="match_parent"
             android:layout_height="wrap_content" android:textSize="15sp"
             android:paddingTop="12dp" />

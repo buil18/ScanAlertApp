@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
  *   Download/PdaBeeper/scan_2026-11-04.csv  (mở được bằng Excel, có BOM UTF-8 cho tiếng Việt)
  */
 final class ScanLog {
-    static final String HEADER = "Ngay,Gio,KetQua,MaQuet,DonHang_Xe,ThongBao,PalletID,SoLuong,DonVi,ViTri,MaSP,TenSP\r\n";
+    static final String HEADER = "STT,Ngay,Gio,KetQua,MaQuet,DonHang_Xe,ThongBao,PalletID,SoLuong,DonVi,ViTri,MaSP,TenSP\r\n";
     static final String FOLDER = "PdaBeeper";
 
     private final Context ctx;
@@ -36,15 +36,15 @@ final class ScanLog {
     static String fileName(String day) { return "scan_" + day + ".csv"; }
 
     /** det = [PalletID, SoLuong, DonVi, ViTri, MaSP, TenSP] */
-    void write(long timeMs, String result, String code, String field, String message, String[] det) {
+    void write(long timeMs, String stt, String result, String code, String field, String message, String[] det) {
         Date d = new Date(timeMs);
         String day = new SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(d);
         String time = new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(d);
-        StringBuilder sb = new StringBuilder(day + "," + time + ","
+        StringBuilder sb = new StringBuilder(csv(stt) + "," + day + "," + time + ","
                 + csv(result) + "," + csv(code) + "," + csv(field) + "," + csv(message));
         for (String x : det) sb.append(',').append(csv(x));
         final String row = sb.append("\r\n").toString();
-        SheetUploader.get(ctx).enqueue(day, time, result, code, field, message, det);
+        SheetUploader.get(ctx).enqueue(stt, day, time, result, code, field, message, det);
         io.execute(() -> {
             try { append(day, row); }
             catch (Exception e) { prefs.log("Lỗi ghi file CSV: " + e); }

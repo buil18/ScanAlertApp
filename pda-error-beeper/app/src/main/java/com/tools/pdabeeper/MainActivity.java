@@ -13,6 +13,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -65,6 +66,12 @@ public class MainActivity extends Activity {
                 + "Phiên bản " + BuildConfigVersion.NAME);
 
         loadFields();
+
+        RadioGroup rg = findViewById(R.id.rgMode);
+        String md = prefs.mode();
+        rg.check("xh".equals(md) ? R.id.rbXh : "sx".equals(md) ? R.id.rbSx : R.id.rbAuto);
+        rg.setOnCheckedChangeListener((g, id) ->
+                prefs.saveMode(id == R.id.rbXh ? "xh" : id == R.id.rbSx ? "sx" : "auto"));
 
         // ---- Việc ai cũng làm được ----
         findViewById(R.id.btnAccessibility).setOnClickListener(v ->
@@ -205,7 +212,7 @@ public class MainActivity extends Activity {
         SheetUploader up = SheetUploader.get(this);
         if (!up.configured()) { toast("Chưa nhập link Web App"); return; }
         java.util.Date d = new java.util.Date();
-        up.enqueue(ScanLog.today(), new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(d),
+        up.enqueue("", ScanLog.today(), new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(d),
                 "TEST", "TEST-123", "", "Dòng thử từ ScanAlert", new String[]{"", "", "", "", "", ""});
         sheetStatus.setText("Đang gửi…");
         sheetStatus.postDelayed(() -> sheetStatus.setText(up.status()), 6000);

@@ -70,6 +70,10 @@ final class Prefs {
         return n.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
     }
 
+    // --- Chế độ làm việc: auto (tự nhận theo màn hình) / xh (ép Xuất hàng) / sx (ép Nhập sản xuất) ---
+    String mode()          { return sp.getString("mode", "auto"); }
+    void saveMode(String m){ sp.edit().putString("mode", m).apply(); }
+
     // --- Kiểm tra chéo GR ---
     boolean crossCheck()   { return sp.getBoolean("cross", true); }
     /** Mẫu mã hàng (regex), mặc định 8 số bắt đầu bằng 1, vd 10136696. */

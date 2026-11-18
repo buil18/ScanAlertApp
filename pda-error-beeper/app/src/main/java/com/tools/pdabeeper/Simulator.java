@@ -44,7 +44,7 @@ final class Simulator {
     private static final class B {
         final Scenario s = new Scenario();
         final List<Pl> shown = new ArrayList<>();
-        int total; String err;
+        int total; String err; boolean sx;
         int seq = 0;
         B(int idx, String name, String expect) {
             s.name = name; s.expect = expect; s.so = String.format(Locale.ROOT, "9900%04d", idx);
@@ -65,8 +65,28 @@ final class Simulator {
         B complete() { for (Pl p : shown) p.full = true; return this; }
         B removeLast() { shown.remove(shown.size() - 1); return this; }
         B error(String e) { err = e; return this; }
+        /** PDA báo "đã được ghi nhận" cho pallet thứ n đang hiện (quét trùng). */
+        B errorDup(int n) { err = "Pallet ID " + shown.get(n - 1).id + " đã được ghi nhận"; return this; }
+        /** Chuyển loại màn hình: true = NHẬP SẢN XUẤT, false = XUẤT HÀNG (xóa danh sách pallet đang hiện). */
+        B screen(boolean sxMode) { sx = sxMode; shown.clear(); err = null; return this; }
         B step(long waitMs) {
             List<String> t = new ArrayList<>();
+            if (sx) {
+                t.add("NHẬP SẢN XUẤT");
+                t.add("Work Order:"); t.add(s.so);
+                t.add("Sản phẩm:"); t.add("10136265 - BIA VIET RB Crate 20x35,5cl 2 VN");
+                t.add("Tổng SL Pallet"); t.add("đã quét:"); t.add(String.valueOf(shown.size()));
+                t.add("Vị trí:"); t.add("HMF30");
+                if (err != null) t.add(err);
+                for (int i = shown.size() - 1; i >= 0; i--) {
+                    Pl p = shown.get(i);
+                    t.add("89" + p.id);
+                    t.add("Số lượng: " + p.qty + " Crate");
+                    t.add("Lot No.: L6322704E0");
+                }
+                s.screens.add(t); s.delays.add(waitMs);
+                return this;
+            }
             t.add("Sales Order: " + s.so);
             t.add("Đã quét: " + shown.size());
             t.add("Tổng SL Pallet: " + total);
@@ -190,6 +210,57 @@ final class Simulator {
             return has(ev, "REC:TONG_KET") && !has(ev, "REC:TONG_KET_LECH") && !has(ev, "REC:TONG_KET_CHUA_DU")
                     ? null : "không ra tổng kết KHỚP 22/22";
         }).done());
+
+        out.add(new B(13, "13. NHẬP SX: quét pallet bất kỳ", "Không bíp, mọi pallet được ghi nhận, không đối chiếu GR")
+                .screen(true).step(150)
+                .add(A, 70).step(200).add(X, 70).step(200).add(C, 35).step(500)
+                .check(ev -> {
+                    if (anyBeep(ev)) return "đã bíp nhầm";
+                    if (n(ev, "REC:OK") != 3) return "ghi nhận " + n(ev, "REC:OK") + "/3 pallet";
+                    return has(ev, "REC:SAI_HANG") || has(ev, "REC:THUA_SL") || has(ev, "REC:TONG_KET") ? "vẫn đối chiếu GR" : null;
+                }).done());
+
+        out.add(new B(14, "14. NHẬP SX: pallet không tồn tại", "Bíp ĐỎ (LỖI)")
+                .screen(true).step(150).add(A, 70).step(200)
+                .error("Pallet ID 88999999999999 không tồn tại").step(600)
+                .check(ev -> has(ev, "BIP:LOI") && has(ev, "REC:LOI") ? null : "không bíp đỏ").done());
+
+        out.add(new B(15, "15. NHẬP SX: bỏ pallet ra", "Ghi XÓA, không bíp")
+                .screen(true).step(150).add(A, 70).step(200).add(A, 70).step(300).removeLast().step(500)
+                .check(ev -> !anyBeep(ev) && has(ev, "REC:XOA") ? null : "không ghi XÓA hoặc bíp nhầm").done());
+
+        out.add(new B(16, "16. Máy đổi từ NHẬP SX sang XUẤT HÀNG", "SX không bíp; sang xuất hàng sai mã thì bíp ĐỎ")
+                .line(A, 320, 320, 160).screen(true).step(150).add(A, 70).step(200).add(X, 70).step(400)
+                .screen(false).total(2).step(300).add(X, 160).step(600)
+                .check(ev -> has(ev, "BIP:SAI") && has(ev, "REC:SAI_HANG") && n(ev, "REC:OK") == 2
+                        ? null : "đổi chế độ sai (không bíp đỏ khi xuất hàng sai mã, hoặc SX ghi thiếu)").done());
+
+        out.add(new B(17, "17. Quét trùng do bóp cò (trong 3 giây)", "Không bíp, ghi TRÙNG, giữ lần đầu")
+                .line(A, 320, 320, 160).total(2).step(150)
+                .add(A, 160).step(150).errorDup(1).step(500)
+                .check(ev -> {
+                    if (anyBeep(ev)) return "đã bíp (đáng lẽ im lặng)";
+                    if (!has(ev, "REC:TRUNG")) return "không ghi TRÙNG – kiểm tra Từ khóa lỗi có dòng: da duoc ghi nhan";
+                    return n(ev, "REC:OK") == 1 && !has(ev, "REC:LOI") ? null : "pallet bị tính lỗi / tính 2 lần";
+                }).done());
+
+        out.add(new B(18, "18. Quét lại pallet sau vài giây", "Bíp CAM nhẹ + ghi TRÙNG")
+                .line(A, 320, 320, 160).total(2).step(150)
+                .add(A, 160).step(3500).errorDup(1).step(600)
+                .check(ev -> has(ev, "BIP:CANH_BAO") && has(ev, "REC:TRUNG") && !has(ev, "BIP:LOI") && !has(ev, "BIP:SAI") ? null
+                        : "không bíp cam / không ghi TRÙNG").done());
+
+        out.add(new B(19, "19. STT: pallet lỗi chiếm vị trí kế tiếp", "OK = 1,2,3; dòng LỖI mang STT 4")
+                .screen(true).step(150).add(A, 70).step(200).add(A, 70).step(200).add(A, 70).step(300)
+                .error("Pallet ID 88999999999999 không tồn tại").step(600)
+                .check(ev -> has(ev, "STT:OK=1") && has(ev, "STT:OK=2") && has(ev, "STT:OK=3") && has(ev, "STT:LOI=4") ? null
+                        : "STT sai: " + ev).done());
+
+        out.add(new B(20, "20. STT: bỏ pallet ra rồi quét lại", "Pallet mới lấy lại STT cũ")
+                .line(A, 640, 640, 160).total(4).step(150)
+                .add(A, 160).step(200).add(A, 160).step(200).add(A, 160).step(300)
+                .removeLast().step(300).add(A, 160).step(500)
+                .check(ev -> has(ev, "STT:XOA=3") && n(ev, "STT:OK=3") == 2 ? null : "STT sai: " + ev).done());
         return out;
     }
 

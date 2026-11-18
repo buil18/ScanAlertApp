@@ -35,6 +35,8 @@ public class ErrorWatcherService extends AccessibilityService {
 
     private static final Pattern P_COUNT = Pattern.compile("da quet\\s*:?\\s*(\\d+)");
     private static final Pattern P_SO = Pattern.compile("(?:sales order|st number|so number)\\s*:?\\s*(\\d+)");
+    private static final Pattern P_WO = Pattern.compile("work order\\s*:?\\s*(\\d+)");
+    private static final Pattern P_QTY_SX = Pattern.compile("s\\S{0,6}\\s+l\\S{0,6}ng\\s*:\\s*(\\d+(?:[.,]\\d+)?)\\s*(\\p{L}+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_XE = Pattern.compile("so xe\\s*:?\\s*((?=[a-z0-9.\\-]*\\d)[a-z0-9][a-z0-9.\\-]{3,})");
     private static final Pattern P_ID = Pattern.compile("(?<!\\d)\\d{12,20}(?!\\d)");
     private static final Pattern P_TOTAL = Pattern.compile("tong sl pallet\\s*:\\s*(\\d+)");
@@ -58,6 +60,14 @@ public class ErrorWatcherService extends AccessibilityService {
     private String lastSo = "";
     private Set<String> lastIds = new LinkedHashSet<>();
     private String curSo = "", curXe = "", curAll = "";
+    private boolean curSx;                           // màn hình hiện tại là NHẬP SẢN XUẤT
+    private String curWo = "", curProdSku = "", curProdName = "", curLoc = "";
+    private String lastMode = "";
+    private int curCount = -1;                       // bộ đếm "Đã quét" trên PDA ở lần đọc gần nhất
+    private Seq seq;
+    private int sttHint = -1;                        // STT mong muốn cho pallet sắp ghi nhận (-1 = số trống nhỏ nhất)
+    private final java.util.Map<String, Long> firstAt = new java.util.HashMap<>();   // "khóa|pallet" -> lúc ghi nhận lần đầu
+    private static final long DUP_QUICK_MS = 3000;   // quét lặp trong ngần này = bóp cò 2 lần, bỏ qua im lặng
     private int curTotal = -1;                       // "Tổng SL Pallet" trên PDA
     private List<String> curTexts = new ArrayList<>();
     private OrderCheck check;
@@ -95,6 +105,7 @@ public class ErrorWatcherService extends AccessibilityService {
         alarm = new Alarm(this);
         scanLog = new ScanLog(this, prefs);
         check = new OrderCheck(this, prefs);
+        seq = new Seq(this);
         overlay = new Overlay(this);
         overlay.setOnTap(() -> alarm.stop());            // chạm vào dải cảnh báo thì tắt còi
         SheetUploader.get(this).flushAsync();             // gửi nốt các dòng còn tồn
@@ -152,9 +163,29 @@ public class ErrorWatcherService extends AccessibilityService {
 
         // --- ngữ cảnh: Sales order, số xe ---
         Matcher m = P_SO.matcher(norm);
-        String so = m.find() ? m.group(1) : "";
+        String soRaw = m.find() ? m.group(1) : "";
         m = P_XE.matcher(norm);
         String xe = m.find() ? m.group(1).toUpperCase(Locale.ROOT) : "";
+        boolean hasSo = !soRaw.isEmpty() || norm.contains("sales order") || norm.contains("st number");
+        m = P_WO.matcher(norm);
+        String wo = m.find() ? m.group(1) : "";
+        boolean hasWo = !wo.isEmpty() || norm.contains("nhap san xuat");
+        String ov = simEvents != null ? "auto" : prefs.mode();
+        boolean sx = "sx".equals(ov) || ("auto".equals(ov) && !hasSo && hasWo);
+        curSx = sx; curWo = sx ? wo : "";
+        final String so = sx ? "" : soRaw;                       // nhập SX: không đối chiếu GR theo SO
+        if (sx) {
+            Matcher mp = P_PROD.matcher(all);
+            if (mp.find()) { curProdSku = mp.group(1); curProdName = mp.group(2).trim(); } else { curProdSku = ""; curProdName = ""; }
+            Matcher ml = P_LOC.matcher(all);
+            curLoc = ml.find() ? ml.group(1).trim() : "";
+        }
+        String modeNow = sx ? "SX" : "XH";
+        if ((hasSo || hasWo || !"auto".equals(ov)) && !modeNow.equals(lastMode)) {
+            lastMode = modeNow;
+            showOv(Overlay.Level.OK, sx ? "🏭 CHẾ ĐỘ: NHẬP SẢN XUẤT\nChỉ báo pallet lỗi, không đối chiếu GR"
+                    : "🚚 CHẾ ĐỘ: XUẤT HÀNG\nĐối chiếu GR từng pallet", 2500);
+        }
         curSo = so; curXe = xe;
         curTexts = texts;
         m = P_TOTAL.matcher(norm);
@@ -167,6 +198,7 @@ public class ErrorWatcherService extends AccessibilityService {
         // --- bộ đếm "đã quét" + các mã pallet đang hiện ---
         m = P_COUNT.matcher(norm);
         int count = m.find() ? Integer.parseInt(m.group(1)) : -1;
+        curCount = count;
         Set<String> ids = new LinkedHashSet<>();
         Matcher mi = P_ID.matcher(all);
         while (mi.find()) if (!mi.group().equals(so)) ids.add(mi.group());
@@ -186,17 +218,24 @@ public class ErrorWatcherService extends AccessibilityService {
 
         boolean countUp = false;
         if (count >= 0) {
-            boolean sameOrder = so.equals(lastSo);
+            String key = sx ? "WO" + wo : so;
+            boolean sameOrder = key.equals(lastSo);
             if (lastCount >= 0 && sameOrder && count != lastCount) {
                 Set<String> added = diff(ids, lastIds), removed = diff(lastIds, ids);
                 if (errorLine != null) added.removeAll(extractIds(errorLine));
-                if (prefs.crossCheck()) added.removeIf(pid -> check.known(so, pid));   // pallet cuộn vào màn hình
+                if (cross()) added.removeIf(pid -> check.known(so, pid));   // pallet cuộn vào màn hình
                 if (count > lastCount) {
                     countUp = true;
                     if (added.isEmpty()) record("OK", "", "Đã quét " + count);
-                    for (String pid : added) onPalletScanned(so, pid, count);
+                    java.util.List<String> al = new ArrayList<>(added);
+                    java.util.Collections.reverse(al);                  // PDA hiện pallet mới nhất trên cùng -> đảo lại cho đúng thứ tự quét
+                    for (int ai = 0; ai < al.size(); ai++) {
+                        sttHint = count - al.size() + 1 + ai;
+                        onPalletScanned(so, al.get(ai), count);
+                    }
+                    sttHint = -1;
                 } else {
-                    for (String pid : removed) { onPalletRemoved(so, pid); record("XOA", pid, "Đã quét " + count); }
+                    for (String pid : removed) { onPalletRemoved(so, pid); record("XOA", pid, "Đã quét " + count); seq.free(orderKey(), pid); }
                     if (removed.isEmpty()) record("XOA", "", "Đã quét " + count);
                 }
                 checkCompletion(so, count);
@@ -206,11 +245,11 @@ public class ErrorWatcherService extends AccessibilityService {
                 startOrder(so, ids);
             }
             lastCount = count;
-            lastSo = so;
+            lastSo = key;
             lastIds = ids;
         }
 
-        if (prefs.crossCheck() && !so.isEmpty() && count >= 0) {
+        if (cross() && !so.isEmpty() && count >= 0) {
             resolvePending();
             // bộ đếm PDA lớn hơn số pallet app đã ghi: pallet nào đang hiện mà chưa ghi thì ghi bù
             if (check.tallySize(so) < count) {
@@ -243,20 +282,83 @@ public class ErrorWatcherService extends AccessibilityService {
         if (isNew) reportError(errorLine, "Màn hình");
     }
 
+    /** Câu báo lỗi của PDA nói về 1 pallet đã được ghi nhận trước đó trong đơn này (quét trùng) -> trả mã pallet đó. */
+    private String duplicatePallet(String text) {
+        String ok = orderKey();
+        if (ok.isEmpty() || seq == null) return null;
+        String n = Prefs.normalize(text);
+        if (!(n.contains("ghi nhan") || n.contains("trung") || n.contains("da quet"))) return null;
+        for (String id : extractIds(text)) if (seq.has(ok, id)) return id;
+        return null;
+    }
+
+    private void onDuplicate(String pid) {
+        String ok = orderKey();
+        Long t0 = firstAt.get(ok + "|" + pid);
+        long age = t0 == null ? Long.MAX_VALUE : now() - t0;
+        int stt = seq.get(ok, pid);
+        if (age < DUP_QUICK_MS) {
+            record("TRUNG", pid, "Quét lặp trong " + (age < 1000 ? "<1" : String.valueOf(age / 1000))
+                    + " giây – bỏ qua, giữ kết quả lần đầu (STT " + stt + ")");
+            return;
+        }
+        record("TRUNG", pid, "Pallet đã quét trước đó (STT " + stt + ") – giữ kết quả lần đầu");
+        beep(1, Alarm.Kind.CANH_BAO);
+        showOv(Overlay.Level.WARN, "⚠ PALLET ĐÃ QUÉT TRƯỚC ĐÓ\nSTT " + stt + " – " + pid + "\nPDA đã ghi nhận từ lần đầu, không cần quét lại", 5000);
+    }
+
     private void reportError(String text, String source) {
+        String dup = duplicatePallet(text);
+        if (dup != null) { onDuplicate(dup); return; }
         String kw = prefs.findKeyword(text);
         if (simEvents == null) prefs.log("BÍP (" + source + ", từ khóa \"" + kw + "\") ← " + shorten(text));
         beep(prefs.beepSeconds(), Alarm.Kind.LOI);
-        showOv(Overlay.Level.ERROR, "⛔ LỖI TỪ PDA\n" + shorten(text) + "\n→ Xóa pallet này trên PDA", 8000);
+        showOv(Overlay.Level.ERROR, (curSx ? "⛔ NHẬP SX – PALLET LỖI\n" + shorten(text) + "\n→ Bỏ pallet này ra kiểm tra lại"
+                : "⛔ LỖI TỪ PDA\n" + shorten(text) + "\n→ Xóa pallet này trên PDA"), 8000);
         record("LOI", String.join(" ", extractIds(text)), text);
     }
 
     private void record(String result, String code, String message) {
-        if (simEvents != null) { simEvents.add("REC:" + result); return; }
-        prefs.log("QUÉT " + result + ": " + (code.isEmpty() ? "(không rõ mã)" : code));
+        String stt = sttFor(result, code);
+        if (simEvents != null) {
+            simEvents.add("REC:" + result);
+            if (!stt.isEmpty()) simEvents.add("STT:" + result + "=" + stt);
+            return;
+        }
+        String label = viLabel(result);
+        prefs.log("QUÉT " + label + (stt.isEmpty() ? "" : " #" + stt) + ": " + (code.isEmpty() ? "(không rõ mã)" : code));
         if (!prefs.scanLogEnabled()) return;
-        String ctx = (curSo.isEmpty() ? "" : "SO " + curSo) + (curXe.isEmpty() ? "" : " / Xe " + curXe);
-        scanLog.write(now(), result, code, ctx.trim(), shorten(message), details(code));
+        String ctx = curSx ? "SX" + (curWo.isEmpty() ? "" : " WO " + curWo) + (curLoc.isEmpty() ? "" : " / " + curLoc)
+                : (curSo.isEmpty() ? "" : "SO " + curSo) + (curXe.isEmpty() ? "" : " / Xe " + curXe);
+        scanLog.write(now(), stt, label, code, ctx.trim(), shorten(message), details(code));
+    }
+
+    /** Nhãn kết quả ghi vào log (tiếng Việt có dấu). */
+    static String viLabel(String r) {
+        switch (r) {
+            case "XOA": return "XÓA";
+            case "LOI": return "LỖI";
+            case "SAI_HANG": return "SAI HÀNG";
+            case "THUA_SL": return "THỪA SL";
+            case "OK_CHUA_DOI_CHIEU": return "CHƯA ĐỐI CHIẾU";
+            case "TONG_KET": return "TỔNG KẾT";
+            case "TONG_KET_LECH": return "TỔNG KẾT LỆCH";
+            case "TONG_KET_CHUA_DU": return "TỔNG KẾT CHƯA ĐỦ";
+            case "TRUNG": return "TRÙNG";
+            default: return r;
+        }
+    }
+
+    /** STT ghi ở đầu dòng log: số thứ tự pallet trong đơn; dòng LỖI mang vị trí pallet đó lẽ ra chiếm; dòng tổng kết để trống. */
+    private String sttFor(String result, String code) {
+        if (result.startsWith("TONG_KET")) return "";
+        String ok = orderKey();
+        if (ok.isEmpty() || seq == null) return "";
+        if (result.equals("LOI")) return curCount >= 0 ? String.valueOf(curCount + 1) : "";
+        Matcher mi = P_ID.matcher(code == null ? "" : code);
+        if (!mi.find()) return "";
+        int n = seq.get(ok, mi.group());
+        return n > 0 ? String.valueOf(n) : "";
     }
 
     /** [PalletID, SoLuong, DonVi, ViTri, MaSP, TenSP] của pallet đầu tiên trong code (lấy từ bộ nhớ đệm màn hình). */
@@ -285,7 +387,7 @@ public class ErrorWatcherService extends AccessibilityService {
     // ===================== KIỂM TRA CHÉO GR =====================
 
     private void startOrder(String so, Set<String> visibleIds) {
-        if (!prefs.crossCheck() || so.isEmpty()) return;
+        if (!cross() || so.isEmpty()) return;
         // pallet đã quét trước khi app theo dõi: ghi nhận vào tally (không báo động)
         for (String pid : visibleIds) {
             if (!check.known(so, pid)) {
@@ -309,8 +411,21 @@ public class ErrorWatcherService extends AccessibilityService {
                 + (error != null ? " (dùng bản lưu trên máy – " + error + ")" : ""));
     }
 
+    private String orderKey() {
+        return curSx ? (curWo.isEmpty() ? "" : "WO" + curWo) : (curSo.isEmpty() ? "" : "SO" + curSo);
+    }
+
     private void onPalletScanned(String so, String pid, int count) {
-        if (!prefs.crossCheck()) { record("OK", pid, "Đã quét " + count); return; }
+        String ok = orderKey();
+        if (!ok.isEmpty() && seq != null && !seq.has(ok, pid)) {
+            seq.assign(ok, pid, sttHint);
+            firstAt.put(ok + "|" + pid, now());
+        }
+        if (!cross()) {
+            record("OK", pid, "Đã quét " + count);
+            if (curSx) showOv(Overlay.Level.OK, "🏭 NHẬP SX – ghi nhận pallet\n" + pid + "\nĐã quét " + count, 1500);
+            return;
+        }
         check.ensure(so, false, this::onExpectLoaded);           // làm mới định kỳ
         PalletInfo pi = palletCache.get(pid);
         String sku = pi == null ? null : pi.sku;
@@ -390,7 +505,7 @@ public class ErrorWatcherService extends AccessibilityService {
     }
 
     private void onPalletRemoved(String so, String pid) {
-        if (!prefs.crossCheck()) return;
+        if (!cross()) return;
         check.remove(so, pid);
         if (pid.equals(errorPallet)) {
             errorPallet = null;
@@ -400,7 +515,7 @@ public class ErrorWatcherService extends AccessibilityService {
     }
 
     private void checkCompletion(String so, int count) {
-        if (!prefs.crossCheck() || curTotal <= 0 || count < curTotal || doneSummary.contains(so)) return;
+        if (!cross() || curTotal <= 0 || count < curTotal || doneSummary.contains(so)) return;
         int unclear = count - check.resolvedCount(so);           // pallet PDA đã nhận nhưng app chưa đọc rõ mã hàng + số lượng
         if (unclear > 0) {
             if (incompleteWarned.add(so + "|" + unclear)) {
@@ -444,6 +559,16 @@ public class ErrorWatcherService extends AccessibilityService {
         }
         m = P_LOC.matcher(seg);
         if (m.find()) p.loc = m.group(1).trim();
+        if (curSx) {                                              // nhập SX: "Số lượng: 70 Crate", mã hàng/vị trí lấy từ phần đầu màn hình
+            m = P_QTY_SX.matcher(seg);
+            if (m.find()) {
+                try { p.qty = Double.parseDouble(m.group(1).replace(',', '.')); } catch (Exception ignored) { }
+                p.unit = m.group(2);
+            }
+            if (!curProdSku.isEmpty()) { p.sku = curProdSku; p.name = curProdName; }
+            if (p.loc.isEmpty()) p.loc = curLoc;
+            return p;
+        }
         m = P_PROD.matcher(seg);
         if (m.find()) { p.sku = m.group(1); p.name = m.group(2).trim(); }
         if (p.sku == null) {                                      // không có dòng "Sản phẩm: ..." -> dò theo mẫu mã hàng
@@ -462,6 +587,9 @@ public class ErrorWatcherService extends AccessibilityService {
         return p;
     }
 
+
+    /** Kiểm tra chéo GR chỉ chạy khi bật trong cài đặt VÀ đang ở chế độ Xuất hàng. */
+    private boolean cross() { return prefs.crossCheck() && !curSx; }
 
     // ===================== GIẢ LẬP (màn hình Giả lập trong app) =====================
 
@@ -511,10 +639,11 @@ public class ErrorWatcherService extends AccessibilityService {
 
     private void simClear(String so) {
         lastCount = -1; lastSo = ""; lastIds = new LinkedHashSet<>(); lastErrorLine = null; errorPallet = null;
-        curSo = ""; curXe = ""; curTotal = -1; curAll = "";
+        curSo = ""; curXe = ""; curTotal = -1; curAll = ""; curSx = false; curWo = ""; lastMode = "";
         pending.clear(); pendingAt.clear(); pendingWarned.clear(); incompleteWarned.clear();
         doneSummary.removeIf(OrderCheck::isSim); noDataWarned.removeIf(OrderCheck::isSim);
-        palletCache.clear();
+        palletCache.clear(); firstAt.clear(); curCount = -1;
+        if (seq != null) seq.clearSim();
         h.removeCallbacks(pendingCheck);
     }
 
